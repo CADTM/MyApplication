@@ -82,7 +82,7 @@ class ReportRepository(private val dao: ReportDao) {
 
         // Section 2: Containers
         csv.append("1. INVENTARIO DE CAJAS SECAS, INTERMODALES Y MARITIMOS (ANDENES Y PATIO)\n")
-        csv.append("Ubicacion,Anden,Categoria,Tipo,No. Economico,Placas,Lugar Placas,Estado,Progreso de Carga,Codigo Sello\n")
+        csv.append("Ubicacion,Anden,Categoria,Tipo,No. Economico,Placas,Lugar Placas,Compania,Medida Contenedor,Estado,Progreso de Carga,Codigo Sello,Destino,Delivery o Documento,Fecha Procesado\n")
         for (c in containers) {
             val location = c.locationType
             val dockNum = c.dockNumber?.toString() ?: ""
@@ -91,19 +91,25 @@ class ReportRepository(private val dao: ReportDao) {
             val eco = c.economicNumber.replace(",", ";").replace("\n", " ")
             val plates = c.plates.replace(",", ";").replace("\n", " ")
             val platesLoc = c.platesLocation.replace(",", ";").replace("\n", " ")
+            val comp = c.company
+            val size = c.containerSize ?: ""
             val status = c.status
             val loadStatus = c.loadStatus ?: ""
             val seal = c.sealCode ?: ""
+            val dest = c.destination ?: ""
+            val doc = c.deliveryDocument ?: ""
+            val procDate = c.processedDate ?: ""
 
-            csv.append("$location,$dockNum,$category,$type,$eco,$plates,$platesLoc,$status,$loadStatus,$seal\n")
+            csv.append("$location,$dockNum,$category,$type,$eco,$plates,$platesLoc,$comp,$size,$status,$loadStatus,$seal,$dest,$doc,$procDate\n")
         }
         csv.append("\n")
 
         // Section 3: Dock Conditions
         csv.append("2. REPORTE DE CONDICION DE ANDENES (1 AL 14)\n")
-        csv.append("Anden,Tipo Anden,Rampa,Seguro de Rampa,Gancho,Cortina,Shelter,Gomas,Topes Seguridad,Semaforo,Luces,Notas\n")
+        csv.append("Anden,Tipo Anden,Fuera de Servicio,Rampa,Seguro de Rampa,Gancho,Cortina,Shelter,Gomas,Topes Seguridad,Semaforo,Luces,Notas\n")
         for (d in dockConditions) {
             val typeStr = if (d.dockNumber in 1..9) "Exportacion (1-9)" else "Recibos/FG (10-14)"
+            val oos = if (d.isOutOfService) "SI" else "NO"
             val rampa = if (d.isRampGood) "BIEN" else "MAL"
             val seguro = if (d.isRampLockGood) "BIEN" else "MAL"
             val gancho = if (d.isDockHookGood) "BIEN" else "MAL"
@@ -115,7 +121,7 @@ class ReportRepository(private val dao: ReportDao) {
             val luces = if (d.isLightsGood) "BIEN" else "MAL"
             val notes = d.notes.replace(",", ";").replace("\n", " ")
 
-            csv.append("${d.dockNumber},$typeStr,$rampa,$seguro,$gancho,$cortina,$shelter,$gomas,$topes,$semaforo,$luces,$notes\n")
+            csv.append("${d.dockNumber},$typeStr,$oos,$rampa,$seguro,$gancho,$cortina,$shelter,$gomas,$topes,$semaforo,$luces,$notes\n")
         }
         csv.append("\n")
 

@@ -283,6 +283,7 @@ fun MainScreen(viewModel: ReportViewModel, modifier: Modifier = Modifier) {
                 when (activeTab) {
                     0 -> DocksTabContent(
                         containers = containers,
+                        dockConditions = dockConditions,
                         onAddContainer = { dockNum ->
                             editingContainer = null
                             presetLocationType = "Andén"
@@ -346,13 +347,42 @@ fun MainScreen(viewModel: ReportViewModel, modifier: Modifier = Modifier) {
                     showAddContainerDialog = false
                     editingContainer = null
                 },
-                onConfirm = { type, locType, dockNum, ecoNum, plates, platesLoc, status, loadStatus, seal ->
+                onConfirm = { type, locType, dockNum, ecoNum, plates, platesLoc, status, loadStatus, seal, size, dest, deliv, procDate ->
                     val currentEdit = editingContainer
                     if (currentEdit != null) {
-                        viewModel.editContainer(currentEdit.id, type, locType, dockNum, ecoNum, plates, platesLoc, status, loadStatus, seal)
+                        viewModel.editContainer(
+                            id = currentEdit.id,
+                            type = type,
+                            locationType = locType,
+                            dockNumber = dockNum,
+                            economicNumber = ecoNum,
+                            plates = plates,
+                            platesLocation = platesLoc,
+                            status = status,
+                            loadStatus = loadStatus,
+                            sealCode = seal,
+                            containerSize = size,
+                            destination = dest,
+                            deliveryDocument = deliv,
+                            processedDate = procDate
+                        )
                         Toast.makeText(context, "Unidad modificada con éxito", Toast.LENGTH_SHORT).show()
                     } else {
-                        viewModel.addContainer(type, locType, dockNum, ecoNum, plates, platesLoc, status, loadStatus, seal)
+                        viewModel.addContainer(
+                            type = type,
+                            locationType = locType,
+                            dockNumber = dockNum,
+                            economicNumber = ecoNum,
+                            plates = plates,
+                            platesLocation = platesLoc,
+                            status = status,
+                            loadStatus = loadStatus,
+                            sealCode = seal,
+                            containerSize = size,
+                            destination = dest,
+                            deliveryDocument = deliv,
+                            processedDate = procDate
+                        )
                         Toast.makeText(context, "Unidad registrada con éxito", Toast.LENGTH_SHORT).show()
                     }
                     showAddContainerDialog = false
@@ -388,7 +418,7 @@ fun MainScreen(viewModel: ReportViewModel, modifier: Modifier = Modifier) {
             InspectDockDialog(
                 condition = condition,
                 onDismiss = { showDockInspectionDialog = null },
-                onConfirm = { ramp, rLock, hook, curtain, shelter, rubbers, stoppers, traffic, lights, notes ->
+                onConfirm = { ramp, rLock, hook, curtain, shelter, rubbers, stoppers, traffic, lights, notes, isOutOfService ->
                     viewModel.updateDockCondition(
                         dockNumber = condition.dockNumber,
                         isRampGood = ramp,
@@ -400,7 +430,8 @@ fun MainScreen(viewModel: ReportViewModel, modifier: Modifier = Modifier) {
                         isSafetyStoppersGood = stoppers,
                         isTrafficLightsGood = traffic,
                         isLightsGood = lights,
-                        notes = notes
+                        notes = notes,
+                        isOutOfService = isOutOfService
                     )
                     showDockInspectionDialog = null
                     Toast.makeText(context, "Estatus de andén ${condition.dockNumber} actualizado", Toast.LENGTH_SHORT).show()
@@ -417,12 +448,17 @@ fun MainScreen(viewModel: ReportViewModel, modifier: Modifier = Modifier) {
 @Composable
 fun DocksTabContent(
     containers: List<ContainerItem>,
+    dockConditions: List<DockCondition>,
     onAddContainer: (Int) -> Unit,
     onEditContainer: (ContainerItem) -> Unit,
     onDeleteContainer: (ContainerItem) -> Unit
 ) {
     val dockContainersMap = remember(containers) {
         containers.filter { it.locationType == "Andén" }.associateBy { it.dockNumber ?: 0 }
+    }
+
+    val dockConditionsMap = remember(dockConditions) {
+        dockConditions.associateBy { it.dockNumber }
     }
 
     LazyColumn(
@@ -437,13 +473,15 @@ fun DocksTabContent(
 
         items((1..9).toList()) { dockNum ->
             val unit = dockContainersMap[dockNum]
+            val cond = dockConditionsMap[dockNum]
             DockRowCard(
                 dockNumber = dockNum,
                 unit = unit,
                 category = "Exportación",
                 onAdd = { onAddContainer(dockNum) },
                 onEdit = { unit?.let { onEditContainer(it) } },
-                onDelete = { unit?.let { onDeleteContainer(it) } }
+                onDelete = { unit?.let { onDeleteContainer(it) } },
+                isOutOfService = cond?.isOutOfService == true
             )
         }
 
@@ -455,13 +493,15 @@ fun DocksTabContent(
 
         items((10..14).toList()) { dockNum ->
             val unit = dockContainersMap[dockNum]
+            val cond = dockConditionsMap[dockNum]
             DockRowCard(
                 dockNumber = dockNum,
                 unit = unit,
                 category = "Recibo/FG",
                 onAdd = { onAddContainer(dockNum) },
                 onEdit = { unit?.let { onEditContainer(it) } },
-                onDelete = { unit?.let { onDeleteContainer(it) } }
+                onDelete = { unit?.let { onDeleteContainer(it) } },
+                isOutOfService = cond?.isOutOfService == true
             )
         }
     }
@@ -817,7 +857,8 @@ fun DockRowCard(
     category: String,
     onAdd: () -> Unit,
     onEdit: () -> Unit,
-    onDelete: () -> Unit
+    onDelete: () -> Unit,
+    isOutOfService: Boolean = false
 ) {
     Card(
         modifier = Modifier
@@ -825,7 +866,9 @@ fun DockRowCard(
             .clickable { if (unit == null) onAdd() },
         shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(
-            containerColor = if (unit == null) {
+            containerColor = if (isOutOfService) {
+                MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.3f)
+            } else if (unit == null) {
                 MaterialTheme.colorScheme.surfaceColorAtElevation(1.dp)
             } else {
                 MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
@@ -844,7 +887,8 @@ fun DockRowCard(
                     .size(48.dp)
                     .clip(CircleShape)
                     .background(
-                        if (unit == null) MaterialTheme.colorScheme.surfaceVariant
+                        if (isOutOfService) MaterialTheme.colorScheme.error
+                        else if (unit == null) MaterialTheme.colorScheme.surfaceVariant
                         else MaterialTheme.colorScheme.primaryContainer
                     ),
                 contentAlignment = Alignment.Center
@@ -853,7 +897,8 @@ fun DockRowCard(
                     text = dockNumber.toString(),
                     fontWeight = FontWeight.Black,
                     fontSize = 18.sp,
-                    color = if (unit == null) MaterialTheme.colorScheme.onSurfaceVariant
+                    color = if (isOutOfService) MaterialTheme.colorScheme.onError
+                    else if (unit == null) MaterialTheme.colorScheme.onSurfaceVariant
                     else MaterialTheme.colorScheme.onPrimaryContainer
                 )
             }
@@ -862,7 +907,24 @@ fun DockRowCard(
 
             if (unit == null) {
                 Column(modifier = Modifier.weight(1f)) {
-                    Text(text = "Andén Vacío", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(text = "Andén Vacío", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                        if (isOutOfService) {
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Surface(
+                                color = MaterialTheme.colorScheme.error,
+                                shape = RoundedCornerShape(4.dp)
+                            ) {
+                                Text(
+                                    "FUERA DE SERVICIO",
+                                    fontSize = 9.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onError,
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                )
+                            }
+                        }
+                    }
                     Text(text = "Toca para registrar contenedor", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 IconButton(onClick = onAdd, modifier = Modifier.testTag("add_dock_unit_btn_$dockNumber")) {
@@ -886,6 +948,21 @@ fun DockRowCard(
                                 Text("Vacía", color = Color.White, modifier = Modifier.padding(2.dp))
                             }
                         }
+                        if (isOutOfService) {
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Surface(
+                                color = MaterialTheme.colorScheme.error,
+                                shape = RoundedCornerShape(4.dp)
+                            ) {
+                                Text(
+                                    "F. DE SERVICIO",
+                                    fontSize = 9.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onError,
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                )
+                            }
+                        }
                     }
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
@@ -899,6 +976,26 @@ fun DockRowCard(
                         fontSize = 13.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(top = 2.dp)
+                    ) {
+                        Text(
+                            text = "Compañía: ${unit.company}",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        if (!unit.containerSize.isNullOrEmpty()) {
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "• Medida: ${unit.containerSize}",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.secondary
+                            )
+                        }
+                    }
 
                     if (unit.status == "Cargada" && unit.loadStatus != null) {
                         Spacer(modifier = Modifier.height(4.dp))
@@ -912,22 +1009,52 @@ fun DockRowCard(
                             fontWeight = FontWeight.Bold,
                             fontSize = 13.sp
                         )
-                        if (unit.loadStatus == "En espera de salida" && !unit.sealCode.isNullOrEmpty()) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
+                        if (unit.loadStatus == "En espera de salida") {
+                            Column(
                                 modifier = Modifier
                                     .padding(top = 4.dp)
                                     .background(Color(0xFFFFEBEE), RoundedCornerShape(4.dp))
-                                    .padding(horizontal = 6.dp, vertical = 2.dp)
+                                    .padding(6.dp)
                             ) {
-                                Icon(Icons.Default.QrCode, contentDescription = null, size20(), tint = Color(0xFFC62828))
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text(
-                                    text = "Sello No: ${unit.sealCode}",
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 12.sp,
-                                    color = Color(0xFFC62828)
-                                )
+                                if (!unit.sealCode.isNullOrEmpty()) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(Icons.Default.QrCode, contentDescription = null, size20(), tint = Color(0xFFC62828))
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text(
+                                            text = "Sello No: ${unit.sealCode}",
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 12.sp,
+                                            color = Color(0xFFC62828)
+                                        )
+                                    }
+                                }
+                                if (!unit.destination.isNullOrEmpty()) {
+                                    Spacer(modifier = Modifier.height(2.dp))
+                                    Text(
+                                        text = "Destino: ${unit.destination}",
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color(0xFFC62828)
+                                    )
+                                }
+                                if (!unit.deliveryDocument.isNullOrEmpty()) {
+                                    Spacer(modifier = Modifier.height(2.dp))
+                                    Text(
+                                        text = "Delivery/Doc: ${unit.deliveryDocument}",
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color(0xFFC62828)
+                                    )
+                                }
+                                if (!unit.processedDate.isNullOrEmpty()) {
+                                    Spacer(modifier = Modifier.height(2.dp))
+                                    Text(
+                                        text = "Procesado: ${unit.processedDate}",
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color(0xFFC62828)
+                                    )
+                                }
                             }
                         }
                     }
@@ -999,6 +1126,27 @@ fun ContainerItemCard(
                     fontSize = 13.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(top = 2.dp)
+                ) {
+                    Text(
+                        text = "Compañía: ${container.company}",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    if (!container.containerSize.isNullOrEmpty()) {
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "• Medida: ${container.containerSize}",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.secondary
+                        )
+                    }
+                }
+
                 if (container.status == "Cargada" && container.loadStatus != null) {
                     Text(
                         text = "Estatus de Carga: ${container.loadStatus}",
@@ -1006,13 +1154,53 @@ fun ContainerItemCard(
                         fontSize = 13.sp,
                         color = MaterialTheme.colorScheme.primary
                     )
-                    if (container.loadStatus == "En espera de salida" && !container.sealCode.isNullOrEmpty()) {
-                        Text(
-                            text = "Código de Sello: ${container.sealCode}",
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 13.sp,
-                            color = Color(0xFFC62828)
-                        )
+                    if (container.loadStatus == "En espera de salida") {
+                        Column(
+                            modifier = Modifier
+                                .padding(top = 4.dp)
+                                .background(Color(0xFFFFEBEE), RoundedCornerShape(4.dp))
+                                .padding(6.dp)
+                        ) {
+                            if (!container.sealCode.isNullOrEmpty()) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(Icons.Default.QrCode, contentDescription = null, size20(), tint = Color(0xFFC62828))
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(
+                                        text = "Código de Sello: ${container.sealCode}",
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 12.sp,
+                                        color = Color(0xFFC62828)
+                                    )
+                                }
+                            }
+                            if (!container.destination.isNullOrEmpty()) {
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(
+                                    text = "Destino: ${container.destination}",
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFFC62828)
+                                )
+                            }
+                            if (!container.deliveryDocument.isNullOrEmpty()) {
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(
+                                    text = "Delivery/Doc: ${container.deliveryDocument}",
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFFC62828)
+                                )
+                            }
+                            if (!container.processedDate.isNullOrEmpty()) {
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(
+                                    text = "Procesado: ${container.processedDate}",
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFFC62828)
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -1046,12 +1234,14 @@ fun DockConditionCard(
     )
 
     val badItems = items.filter { !it.second }
+    val isOos = condition.isOutOfService
 
     Card(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick),
-        shape = RoundedCornerShape(12.dp)
+        shape = RoundedCornerShape(12.dp),
+        colors = if (isOos) CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.4f)) else CardDefaults.cardColors()
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Row(
@@ -1063,27 +1253,48 @@ fun DockConditionCard(
                         .size(36.dp)
                         .clip(CircleShape)
                         .background(
-                            if (badItems.isEmpty()) Color(0xFFE8F5E9) else Color(0xFFFFEBEE)
+                            if (isOos) MaterialTheme.colorScheme.error
+                            else if (badItems.isEmpty()) Color(0xFFE8F5E9)
+                            else Color(0xFFFFEBEE)
                         ),
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
                         text = condition.dockNumber.toString(),
                         fontWeight = FontWeight.Bold,
-                        color = if (badItems.isEmpty()) Color(0xFF2E7D32) else Color(0xFFC62828)
+                        color = if (isOos) MaterialTheme.colorScheme.onError
+                        else if (badItems.isEmpty()) Color(0xFF2E7D32)
+                        else Color(0xFFC62828)
                     )
                 }
                 Spacer(modifier = Modifier.width(12.dp))
                 Column(modifier = Modifier.weight(1f)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = "Andén ${condition.dockNumber} - " + if (condition.dockNumber in 1..9) "Exportación" else "Recibos",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 16.sp
+                        )
+                        if (isOos) {
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Surface(
+                                color = MaterialTheme.colorScheme.error,
+                                shape = RoundedCornerShape(4.dp)
+                            ) {
+                                Text(
+                                    "FUERA DE SERVICIO",
+                                    fontSize = 9.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onError,
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                )
+                            }
+                        }
+                    }
                     Text(
-                        text = "Andén ${condition.dockNumber} - " + if (condition.dockNumber in 1..9) "Exportación" else "Recibos",
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 16.sp
-                    )
-                    Text(
-                        text = if (badItems.isEmpty()) "Buenas condiciones generales" else "Detalles encontrados: ${badItems.size}",
+                        text = if (isOos) "FUERA DE SERVICIO" else if (badItems.isEmpty()) "Buenas condiciones generales" else "Detalles encontrados: ${badItems.size}",
                         fontSize = 12.sp,
-                        color = if (badItems.isEmpty()) Color(0xFF2E7D32) else Color(0xFFC62828)
+                        color = if (isOos) MaterialTheme.colorScheme.error else if (badItems.isEmpty()) Color(0xFF2E7D32) else Color(0xFFC62828)
                     )
                 }
                 Icon(
@@ -1295,7 +1506,11 @@ fun AddContainerDialog(
         platesLocation: String,
         status: String,
         loadStatus: String?,
-        sealCode: String?
+        sealCode: String?,
+        containerSize: String?,
+        destination: String?,
+        deliveryDocument: String?,
+        processedDate: String?
     ) -> Unit
 ) {
     var type by remember { mutableStateOf(unitToEdit?.type ?: "Caja Seca") }
@@ -1307,6 +1522,10 @@ fun AddContainerDialog(
     var status by remember { mutableStateOf(unitToEdit?.status ?: "Vacía") }
     var loadStatus by remember { mutableStateOf(unitToEdit?.loadStatus ?: "Falta por completar") }
     var sealCode by remember { mutableStateOf(unitToEdit?.sealCode ?: "") }
+    var containerSize by remember { mutableStateOf(unitToEdit?.containerSize ?: "") }
+    var destination by remember { mutableStateOf(unitToEdit?.destination ?: "") }
+    var deliveryDocument by remember { mutableStateOf(unitToEdit?.deliveryDocument ?: "") }
+    var processedDate by remember { mutableStateOf(unitToEdit?.processedDate ?: "") }
 
     val unitTypes = listOf("Caja Seca", "Intermodal", "Contenedor Marítimo")
     val statusTypes = listOf("Vacía", "Cargada")
@@ -1404,6 +1623,23 @@ fun AddContainerDialog(
                     }
                 }
 
+                // Compañía (No modificable)
+                item {
+                    val computedCompany = when (type) {
+                        "Caja Seca" -> "MEX-CAL"
+                        "Intermodal" -> "JBHUNT"
+                        "Contenedor Marítimo" -> "CONTENEDOR"
+                        else -> ""
+                    }
+                    OutlinedTextField(
+                        value = computedCompany,
+                        onValueChange = {},
+                        label = { Text("Compañía (No modificable)") },
+                        readOnly = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+
                 // No. Económico
                 item {
                     Column {
@@ -1471,16 +1707,67 @@ fun AddContainerDialog(
 
                 // Placas
                 item {
-                    OutlinedTextField(
-                        value = plates,
-                        onValueChange = { plates = it },
-                        label = { Text("Placas") },
-                        placeholder = { Text("Ej. AB-1234-CD") },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .testTag("plates_input"),
-                        singleLine = true
-                    )
+                    Column {
+                        OutlinedTextField(
+                            value = plates,
+                            onValueChange = { plates = it },
+                            label = { Text("Placas") },
+                            placeholder = { Text("Ej. AB-1234-CD") },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("plates_input"),
+                            singleLine = true
+                        )
+
+                        val platesSuggestions = remember(plates, containersHistory) {
+                            if (plates.isBlank()) {
+                                emptyList()
+                            } else {
+                                containersHistory
+                                    .filter { 
+                                        it.plates.startsWith(plates, ignoreCase = true) && 
+                                        it.plates.lowercase() != plates.lowercase()
+                                    }
+                                    .distinctBy { it.plates }
+                                    .take(5)
+                            }
+                        }
+
+                        if (platesSuggestions.isNotEmpty()) {
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Text(
+                                text = "Coincidencias de placas (toca para autocompletar):",
+                                fontSize = 11.sp,
+                                color = MaterialTheme.colorScheme.primary,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .horizontalScroll(rememberScrollState())
+                                    .padding(vertical = 4.dp)
+                            ) {
+                                platesSuggestions.forEach { match ->
+                                    SuggestionChip(
+                                        onClick = {
+                                            plates = match.plates
+                                            platesLocation = match.platesLocation
+                                            economicNumber = match.economicNumber
+                                            type = match.type
+                                            status = match.status
+                                        },
+                                        label = {
+                                            Column {
+                                                Text(match.plates, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                                Text("Económico: ${match.economicNumber}", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                            }
+                                        }
+                                    )
+                                }
+                            }
+                        }
+                    }
                 }
 
                 // Lugar de Placas
@@ -1524,7 +1811,7 @@ fun AddContainerDialog(
                                         .fillMaxWidth()
                                         .clickable { loadStatus = ls }
                                         .padding(vertical = 4.dp)
-                                ) {
+                                  ) {
                                     RadioButton(selected = loadStatus == ls, onClick = { loadStatus = ls })
                                     Spacer(modifier = Modifier.width(8.dp))
                                     Text(ls)
@@ -1548,6 +1835,62 @@ fun AddContainerDialog(
                                 singleLine = true
                             )
                         }
+
+                        // Destino, Delivery, Fecha de procesado
+                        item {
+                            OutlinedTextField(
+                                value = destination,
+                                onValueChange = { destination = it },
+                                label = { Text("Destino") },
+                                placeholder = { Text("Ej. Laredo, TX") },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .testTag("destination_input"),
+                                singleLine = true
+                            )
+                        }
+
+                        item {
+                            OutlinedTextField(
+                                value = deliveryDocument,
+                                onValueChange = { deliveryDocument = it },
+                                label = { Text("Delivery / Documento") },
+                                placeholder = { Text("Ej. D-982451") },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .testTag("delivery_doc_input"),
+                                singleLine = true
+                            )
+                        }
+
+                        item {
+                            OutlinedTextField(
+                                value = processedDate,
+                                onValueChange = { processedDate = it },
+                                label = { Text("Fecha de Procesado") },
+                                placeholder = { Text("Ej. 27/06/2026") },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .testTag("processed_date_input"),
+                                singleLine = true
+                            )
+                        }
+                    }
+                }
+
+                // Medida de contenedor (solo si es Contenedor Marítimo Vacío)
+                if (type == "Contenedor Marítimo" && status == "Vacía") {
+                    item {
+                        OutlinedTextField(
+                            value = containerSize,
+                            onValueChange = { containerSize = it },
+                            label = { Text("Medida del Contenedor") },
+                            placeholder = { Text("Ej. 20ft, 40ft, 45ft") },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("container_size_input"),
+                            singleLine = true
+                        )
                     }
                 }
 
@@ -1575,7 +1918,11 @@ fun AddContainerDialog(
                                     platesLocation,
                                     status,
                                     loadStatus,
-                                    sealCode
+                                    sealCode,
+                                    containerSize,
+                                    destination,
+                                    deliveryDocument,
+                                    processedDate
                                 )
                             },
                             enabled = economicNumber.isNotBlank(),
@@ -1737,7 +2084,8 @@ fun InspectDockDialog(
         stoppers: Boolean,
         traffic: Boolean,
         lights: Boolean,
-        notes: String
+        notes: String,
+        isOutOfService: Boolean
     ) -> Unit
 ) {
     var ramp by remember { mutableStateOf(condition.isRampGood) }
@@ -1750,6 +2098,7 @@ fun InspectDockDialog(
     var traffic by remember { mutableStateOf(condition.isTrafficLightsGood) }
     var lights by remember { mutableStateOf(condition.isLightsGood) }
     var notes by remember { mutableStateOf(condition.notes) }
+    var isOutOfService by remember { mutableStateOf(condition.isOutOfService) }
 
     Dialog(onDismissRequest = onDismiss) {
         Card(
@@ -1794,6 +2143,43 @@ fun InspectDockDialog(
                     }
                 }
 
+                // Out of service toggle
+                item {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(
+                                if (isOutOfService) MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.4f)
+                                else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
+                                shape = RoundedCornerShape(8.dp)
+                            )
+                            .clickable { isOutOfService = !isOutOfService }
+                            .padding(horizontal = 12.dp, vertical = 8.dp)
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                "Andén Fuera de Servicio",
+                                fontWeight = FontWeight.Bold,
+                                color = if (isOutOfService) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface
+                            )
+                            Text(
+                                if (isOutOfService) "Reportado como FUERA DE SERVICIO" else "Operativo / Disponible",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = if (isOutOfService) MaterialTheme.colorScheme.onErrorContainer else MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Switch(
+                            checked = isOutOfService,
+                            onCheckedChange = { isOutOfService = it },
+                            colors = SwitchDefaults.colors(
+                                checkedThumbColor = MaterialTheme.colorScheme.error,
+                                checkedTrackColor = MaterialTheme.colorScheme.errorContainer
+                            )
+                        )
+                    }
+                }
+
                 item { Divider() }
 
                 // The 9 Checklist items
@@ -1831,7 +2217,7 @@ fun InspectDockDialog(
                         Spacer(modifier = Modifier.width(8.dp))
                         Button(
                             onClick = {
-                                onConfirm(ramp, rLock, hook, curtain, shelter, rubbers, stoppers, traffic, lights, notes)
+                                onConfirm(ramp, rLock, hook, curtain, shelter, rubbers, stoppers, traffic, lights, notes, isOutOfService)
                             },
                             modifier = Modifier.testTag("confirm_dock_inspection_btn")
                         ) {

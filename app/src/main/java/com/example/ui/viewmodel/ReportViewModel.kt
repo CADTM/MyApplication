@@ -91,7 +91,11 @@ class ReportViewModel(private val repository: ReportRepository) : ViewModel() {
         platesLocation: String,
         status: String,
         loadStatus: String?,
-        sealCode: String?
+        sealCode: String?,
+        containerSize: String? = null,
+        destination: String? = null,
+        deliveryDocument: String? = null,
+        processedDate: String? = null
     ) {
         viewModelScope.launch {
             val reportId = _activeDate.value
@@ -100,6 +104,15 @@ class ReportViewModel(private val repository: ReportRepository) : ViewModel() {
             } else {
                 null
             }
+
+            val companyValue = when (type) {
+                "Caja Seca" -> "MEX-CAL"
+                "Intermodal" -> "JBHUNT"
+                "Contenedor Marítimo" -> "CONTENEDOR"
+                else -> ""
+            }
+
+            val isDepartureWaiting = status == "Cargada" && loadStatus == "En espera de salida"
 
             val item = ContainerItem(
                 reportId = reportId,
@@ -112,7 +125,12 @@ class ReportViewModel(private val repository: ReportRepository) : ViewModel() {
                 platesLocation = platesLocation.trim().uppercase(),
                 status = status,
                 loadStatus = if (status == "Cargada") loadStatus else null,
-                sealCode = if (status == "Cargada" && loadStatus == "En espera de salida") sealCode?.trim() else null
+                sealCode = if (isDepartureWaiting) sealCode?.trim() else null,
+                company = companyValue,
+                containerSize = if (type == "Contenedor Marítimo" && status == "Vacía") containerSize?.trim() else null,
+                destination = if (isDepartureWaiting) destination?.trim()?.uppercase() else null,
+                deliveryDocument = if (isDepartureWaiting) deliveryDocument?.trim()?.uppercase() else null,
+                processedDate = if (isDepartureWaiting) processedDate?.trim()?.uppercase() else null
             )
             repository.addContainerItem(item)
         }
@@ -140,7 +158,11 @@ class ReportViewModel(private val repository: ReportRepository) : ViewModel() {
         platesLocation: String,
         status: String,
         loadStatus: String?,
-        sealCode: String?
+        sealCode: String?,
+        containerSize: String? = null,
+        destination: String? = null,
+        deliveryDocument: String? = null,
+        processedDate: String? = null
     ) {
         viewModelScope.launch {
             val reportId = _activeDate.value
@@ -149,6 +171,15 @@ class ReportViewModel(private val repository: ReportRepository) : ViewModel() {
             } else {
                 null
             }
+
+            val companyValue = when (type) {
+                "Caja Seca" -> "MEX-CAL"
+                "Intermodal" -> "JBHUNT"
+                "Contenedor Marítimo" -> "CONTENEDOR"
+                else -> ""
+            }
+
+            val isDepartureWaiting = status == "Cargada" && loadStatus == "En espera de salida"
 
             val item = ContainerItem(
                 id = id,
@@ -162,7 +193,12 @@ class ReportViewModel(private val repository: ReportRepository) : ViewModel() {
                 platesLocation = platesLocation.trim().uppercase(),
                 status = status,
                 loadStatus = if (status == "Cargada") loadStatus else null,
-                sealCode = if (status == "Cargada" && loadStatus == "En espera de salida") sealCode?.trim() else null
+                sealCode = if (isDepartureWaiting) sealCode?.trim() else null,
+                company = companyValue,
+                containerSize = if (type == "Contenedor Marítimo" && status == "Vacía") containerSize?.trim() else null,
+                destination = if (isDepartureWaiting) destination?.trim()?.uppercase() else null,
+                deliveryDocument = if (isDepartureWaiting) deliveryDocument?.trim()?.uppercase() else null,
+                processedDate = if (isDepartureWaiting) processedDate?.trim()?.uppercase() else null
             )
             repository.addContainerItem(item)
         }
@@ -214,7 +250,8 @@ class ReportViewModel(private val repository: ReportRepository) : ViewModel() {
         isSafetyStoppersGood: Boolean,
         isTrafficLightsGood: Boolean,
         isLightsGood: Boolean,
-        notes: String
+        notes: String,
+        isOutOfService: Boolean = false
     ) {
         viewModelScope.launch {
             val reportId = _activeDate.value
@@ -231,7 +268,8 @@ class ReportViewModel(private val repository: ReportRepository) : ViewModel() {
                 isSafetyStoppersGood = isSafetyStoppersGood,
                 isTrafficLightsGood = isTrafficLightsGood,
                 isLightsGood = isLightsGood,
-                notes = notes.trim()
+                notes = notes.trim(),
+                isOutOfService = isOutOfService
             )
             repository.updateDockCondition(cond)
         }

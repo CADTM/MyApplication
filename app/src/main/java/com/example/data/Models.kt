@@ -24,6 +24,11 @@ data class ContainerItem(
     val status: String, // "Vacía" or "Cargada"
     val loadStatus: String? = null, // "Completa", "Falta por completar", "Falta por procesar", "En espera de salida"
     val sealCode: String? = null, // numeric code for "En espera de salida"
+    val company: String = "", // MEX-CAL for Caja Seca, JBHUNT for Intermodal, CONTENEDOR for Contenedor Marítimo
+    val containerSize: String? = null, // measure of container if empty Contenedor Marítimo
+    val destination: String? = null, // extra field for "En espera de salida"
+    val deliveryDocument: String? = null, // extra field for "En espera de salida"
+    val processedDate: String? = null, // extra field for "En espera de salida"
     val timestamp: Long = System.currentTimeMillis()
 )
 
@@ -51,5 +56,6 @@ data class DockCondition(
     val isSafetyStoppersGood: Boolean = true,
     val isTrafficLightsGood: Boolean = true,
     val isLightsGood: Boolean = true,
-    val notes: String = ""
+    val notes: String = "",
+    val isOutOfService: Boolean = false
 )

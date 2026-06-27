@@ -73,7 +73,7 @@ interface ReportDao {
 
 @Database(
     entities = [DailyReport::class, ContainerItem::class, DamagedBox::class, DockCondition::class],
-    version = 1,
+    version = 2,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -89,7 +89,9 @@ abstract class AppDatabase : RoomDatabase() {
                     context.applicationContext,
                     AppDatabase::class.java,
                     "control_andenes_db"
-                ).build()
+                )
+                .fallbackToDestructiveMigration()
+                .build()
                 INSTANCE = instance
                 instance
             }
