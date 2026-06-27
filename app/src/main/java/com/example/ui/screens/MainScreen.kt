@@ -1795,6 +1795,48 @@ fun AddContainerDialog(
                             singleLine = true
                         )
 
+                        val exactMatch = remember(economicNumber, containersHistory) {
+                            if (economicNumber.trim().isBlank()) null
+                            else containersHistory.firstOrNull { it.economicNumber.equals(economicNumber.trim(), ignoreCase = true) }
+                        }
+
+                        if (exactMatch != null) {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Button(
+                                onClick = {
+                                    type = exactMatch.type
+                                    if (exactMatch.locationType == "Andén" || exactMatch.locationType == "Patio") {
+                                        locationType = exactMatch.locationType
+                                        if (exactMatch.locationType == "Andén") {
+                                            dockNumber = exactMatch.dockNumber ?: 1
+                                        }
+                                    }
+                                    plates = exactMatch.plates
+                                    platesLocation = exactMatch.platesLocation
+                                    status = exactMatch.status
+                                    loadStatus = exactMatch.loadStatus ?: "Falta por completar"
+                                    sealCode = exactMatch.sealCode ?: ""
+                                    containerSize = exactMatch.containerSize ?: ""
+                                    destination = exactMatch.destination ?: ""
+                                    deliveryDocument = exactMatch.deliveryDocument ?: ""
+                                    processedDate = exactMatch.processedDate ?: ""
+                                    isStorageOnly = exactMatch.isStorageOnly
+                                    mexCalType = exactMatch.mexCalType ?: "Interplanta"
+                                    receptionDate = exactMatch.receptionDate ?: receptionDate
+                                    materialType = exactMatch.materialType ?: "FG"
+                                },
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                                    contentColor = MaterialTheme.colorScheme.onSecondaryContainer
+                                ),
+                                modifier = Modifier.fillMaxWidth().testTag("autofill_exact_match_btn")
+                            ) {
+                                Icon(Icons.Default.ContentPaste, contentDescription = null, modifier = Modifier.size(18.dp))
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Copiar datos de registro anterior", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
+
                         val suggestions = remember(economicNumber, containersHistory) {
                             if (economicNumber.isBlank()) {
                                 emptyList()
@@ -1832,6 +1874,22 @@ fun AddContainerDialog(
                                             platesLocation = match.platesLocation
                                             type = match.type
                                             status = match.status
+                                            if (match.locationType == "Andén" || match.locationType == "Patio") {
+                                                locationType = match.locationType
+                                                if (match.locationType == "Andén") {
+                                                    dockNumber = match.dockNumber ?: 1
+                                                }
+                                            }
+                                            loadStatus = match.loadStatus ?: "Falta por completar"
+                                            sealCode = match.sealCode ?: ""
+                                            containerSize = match.containerSize ?: ""
+                                            destination = match.destination ?: ""
+                                            deliveryDocument = match.deliveryDocument ?: ""
+                                            processedDate = match.processedDate ?: ""
+                                            isStorageOnly = match.isStorageOnly
+                                            mexCalType = match.mexCalType ?: "Interplanta"
+                                            receptionDate = match.receptionDate ?: receptionDate
+                                            materialType = match.materialType ?: "FG"
                                         },
                                         label = {
                                             Column {
@@ -1859,6 +1917,48 @@ fun AddContainerDialog(
                                 .testTag("plates_input"),
                             singleLine = true
                         )
+
+                        val exactPlatesMatch = remember(plates, containersHistory) {
+                            if (plates.trim().isBlank()) null
+                            else containersHistory.firstOrNull { it.plates.equals(plates.trim(), ignoreCase = true) }
+                        }
+
+                        if (exactPlatesMatch != null) {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Button(
+                                onClick = {
+                                    type = exactPlatesMatch.type
+                                    if (exactPlatesMatch.locationType == "Andén" || exactPlatesMatch.locationType == "Patio") {
+                                        locationType = exactPlatesMatch.locationType
+                                        if (exactPlatesMatch.locationType == "Andén") {
+                                            dockNumber = exactPlatesMatch.dockNumber ?: 1
+                                        }
+                                    }
+                                    economicNumber = exactPlatesMatch.economicNumber
+                                    platesLocation = exactPlatesMatch.platesLocation
+                                    status = exactPlatesMatch.status
+                                    loadStatus = exactPlatesMatch.loadStatus ?: "Falta por completar"
+                                    sealCode = exactPlatesMatch.sealCode ?: ""
+                                    containerSize = exactPlatesMatch.containerSize ?: ""
+                                    destination = exactPlatesMatch.destination ?: ""
+                                    deliveryDocument = exactPlatesMatch.deliveryDocument ?: ""
+                                    processedDate = exactPlatesMatch.processedDate ?: ""
+                                    isStorageOnly = exactPlatesMatch.isStorageOnly
+                                    mexCalType = exactPlatesMatch.mexCalType ?: "Interplanta"
+                                    receptionDate = exactPlatesMatch.receptionDate ?: receptionDate
+                                    materialType = exactPlatesMatch.materialType ?: "FG"
+                                },
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                                    contentColor = MaterialTheme.colorScheme.onSecondaryContainer
+                                ),
+                                modifier = Modifier.fillMaxWidth().testTag("autofill_exact_plates_match_btn")
+                            ) {
+                                Icon(Icons.Default.ContentPaste, contentDescription = null, modifier = Modifier.size(18.dp))
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Copiar datos de registro anterior", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
 
                         val platesSuggestions = remember(plates, containersHistory) {
                             if (plates.isBlank()) {
@@ -1897,6 +1997,22 @@ fun AddContainerDialog(
                                             economicNumber = match.economicNumber
                                             type = match.type
                                             status = match.status
+                                            if (match.locationType == "Andén" || match.locationType == "Patio") {
+                                                locationType = match.locationType
+                                                if (match.locationType == "Andén") {
+                                                    dockNumber = match.dockNumber ?: 1
+                                                }
+                                            }
+                                            loadStatus = match.loadStatus ?: "Falta por completar"
+                                            sealCode = match.sealCode ?: ""
+                                            containerSize = match.containerSize ?: ""
+                                            destination = match.destination ?: ""
+                                            deliveryDocument = match.deliveryDocument ?: ""
+                                            processedDate = match.processedDate ?: ""
+                                            isStorageOnly = match.isStorageOnly
+                                            mexCalType = match.mexCalType ?: "Interplanta"
+                                            receptionDate = match.receptionDate ?: receptionDate
+                                            materialType = match.materialType ?: "FG"
                                         },
                                         label = {
                                             Column {
