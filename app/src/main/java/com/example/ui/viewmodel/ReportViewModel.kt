@@ -95,7 +95,11 @@ class ReportViewModel(private val repository: ReportRepository) : ViewModel() {
         containerSize: String? = null,
         destination: String? = null,
         deliveryDocument: String? = null,
-        processedDate: String? = null
+        processedDate: String? = null,
+        isStorageOnly: Boolean = false,
+        mexCalType: String? = null,
+        receptionDate: String? = null,
+        materialType: String? = "FG"
     ) {
         viewModelScope.launch {
             val reportId = _activeDate.value
@@ -130,7 +134,11 @@ class ReportViewModel(private val repository: ReportRepository) : ViewModel() {
                 containerSize = if (type == "Contenedor Marítimo" && status == "Vacía") containerSize?.trim() else null,
                 destination = if (isDepartureWaiting) destination?.trim()?.uppercase() else null,
                 deliveryDocument = if (isDepartureWaiting) deliveryDocument?.trim()?.uppercase() else null,
-                processedDate = if (isDepartureWaiting) processedDate?.trim()?.uppercase() else null
+                processedDate = if (isDepartureWaiting) processedDate?.trim()?.uppercase() else null,
+                isStorageOnly = isStorageOnly,
+                mexCalType = if (companyValue == "MEX-CAL") mexCalType else null,
+                receptionDate = receptionDate,
+                materialType = materialType
             )
             repository.addContainerItem(item)
         }
@@ -162,7 +170,11 @@ class ReportViewModel(private val repository: ReportRepository) : ViewModel() {
         containerSize: String? = null,
         destination: String? = null,
         deliveryDocument: String? = null,
-        processedDate: String? = null
+        processedDate: String? = null,
+        isStorageOnly: Boolean = false,
+        mexCalType: String? = null,
+        receptionDate: String? = null,
+        materialType: String? = "FG"
     ) {
         viewModelScope.launch {
             val reportId = _activeDate.value
@@ -198,7 +210,11 @@ class ReportViewModel(private val repository: ReportRepository) : ViewModel() {
                 containerSize = if (type == "Contenedor Marítimo" && status == "Vacía") containerSize?.trim() else null,
                 destination = if (isDepartureWaiting) destination?.trim()?.uppercase() else null,
                 deliveryDocument = if (isDepartureWaiting) deliveryDocument?.trim()?.uppercase() else null,
-                processedDate = if (isDepartureWaiting) processedDate?.trim()?.uppercase() else null
+                processedDate = if (isDepartureWaiting) processedDate?.trim()?.uppercase() else null,
+                isStorageOnly = isStorageOnly,
+                mexCalType = if (companyValue == "MEX-CAL") mexCalType else null,
+                receptionDate = receptionDate,
+                materialType = materialType
             )
             repository.addContainerItem(item)
         }

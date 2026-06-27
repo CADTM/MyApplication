@@ -29,7 +29,11 @@ data class ContainerItem(
     val destination: String? = null, // extra field for "En espera de salida"
     val deliveryDocument: String? = null, // extra field for "En espera de salida"
     val processedDate: String? = null, // extra field for "En espera de salida"
-    val timestamp: Long = System.currentTimeMillis()
+    val timestamp: Long = System.currentTimeMillis(),
+    val isStorageOnly: Boolean = false,
+    val mexCalType: String? = null, // "Importación" or "Interplanta" for MEX-CAL
+    val receptionDate: String? = null, // "Fecha de recepción"
+    val materialType: String? = "FG" // "Tipo de Material" (default "FG")
 )
 
 @Entity(tableName = "damaged_boxes")

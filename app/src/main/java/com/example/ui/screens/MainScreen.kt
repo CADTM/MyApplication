@@ -347,7 +347,7 @@ fun MainScreen(viewModel: ReportViewModel, modifier: Modifier = Modifier) {
                     showAddContainerDialog = false
                     editingContainer = null
                 },
-                onConfirm = { type, locType, dockNum, ecoNum, plates, platesLoc, status, loadStatus, seal, size, dest, deliv, procDate ->
+                onConfirm = { type, locType, dockNum, ecoNum, plates, platesLoc, status, loadStatus, seal, size, dest, deliv, procDate, isStorage, mexCal, recepDate, matType ->
                     val currentEdit = editingContainer
                     if (currentEdit != null) {
                         viewModel.editContainer(
@@ -364,7 +364,11 @@ fun MainScreen(viewModel: ReportViewModel, modifier: Modifier = Modifier) {
                             containerSize = size,
                             destination = dest,
                             deliveryDocument = deliv,
-                            processedDate = procDate
+                            processedDate = procDate,
+                            isStorageOnly = isStorage,
+                            mexCalType = mexCal,
+                            receptionDate = recepDate,
+                            materialType = matType
                         )
                         Toast.makeText(context, "Unidad modificada con éxito", Toast.LENGTH_SHORT).show()
                     } else {
@@ -381,7 +385,11 @@ fun MainScreen(viewModel: ReportViewModel, modifier: Modifier = Modifier) {
                             containerSize = size,
                             destination = dest,
                             deliveryDocument = deliv,
-                            processedDate = procDate
+                            processedDate = procDate,
+                            isStorageOnly = isStorage,
+                            mexCalType = mexCal,
+                            receptionDate = recepDate,
+                            materialType = matType
                         )
                         Toast.makeText(context, "Unidad registrada con éxito", Toast.LENGTH_SHORT).show()
                     }
@@ -1597,7 +1605,11 @@ fun AddContainerDialog(
         containerSize: String?,
         destination: String?,
         deliveryDocument: String?,
-        processedDate: String?
+        processedDate: String?,
+        isStorageOnly: Boolean,
+        mexCalType: String?,
+        receptionDate: String?,
+        materialType: String?
     ) -> Unit
 ) {
     var type by remember { mutableStateOf(unitToEdit?.type ?: "Caja Seca") }
@@ -1613,6 +1625,10 @@ fun AddContainerDialog(
     var destination by remember { mutableStateOf(unitToEdit?.destination ?: "") }
     var deliveryDocument by remember { mutableStateOf(unitToEdit?.deliveryDocument ?: "") }
     var processedDate by remember { mutableStateOf(unitToEdit?.processedDate ?: "") }
+    var isStorageOnly by remember { mutableStateOf(unitToEdit?.isStorageOnly ?: false) }
+    var mexCalType by remember { mutableStateOf(unitToEdit?.mexCalType ?: "Interplanta") }
+    var receptionDate by remember { mutableStateOf(unitToEdit?.receptionDate ?: SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())) }
+    var materialType by remember { mutableStateOf(unitToEdit?.materialType ?: "FG") }
 
     val unitTypes = listOf("Caja Seca", "Intermodal", "Contenedor Marítimo")
     val statusTypes = listOf("Vacía", "Cargada")
@@ -1710,6 +1726,24 @@ fun AddContainerDialog(
                     }
                 }
 
+                // Almacenaje
+                item {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { isStorageOnly = !isStorageOnly }
+                            .padding(vertical = 4.dp)
+                    ) {
+                        Checkbox(
+                            checked = isStorageOnly,
+                            onCheckedChange = { isStorageOnly = it }
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Solo para Almacenaje", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                    }
+                }
+
                 // Compañía (No modificable)
                 item {
                     val computedCompany = when (type) {
@@ -1725,6 +1759,26 @@ fun AddContainerDialog(
                         readOnly = true,
                         modifier = Modifier.fillMaxWidth()
                     )
+                }
+
+                if (type == "Caja Seca") {
+                    item {
+                        Text("Operación (MÉX-CAL)", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            FilterChip(
+                                selected = mexCalType == "Importación",
+                                onClick = { mexCalType = "Importación" },
+                                label = { Text("Importación") },
+                                modifier = Modifier.weight(1f)
+                            )
+                            FilterChip(
+                                selected = mexCalType == "Interplanta",
+                                onClick = { mexCalType = "Interplanta" },
+                                label = { Text("Interplanta") },
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                    }
                 }
 
                 // No. Económico
@@ -1859,14 +1913,81 @@ fun AddContainerDialog(
 
                 // Lugar de Placas
                 item {
+                    Text("Procedencia de Placas", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                    var platesLocExpanded by remember { mutableStateOf(false) }
+                    val allowedStates = listOf("California", "Maine", "Tennessee", "Oklahoma", "Indiana")
+                    ExposedDropdownMenuBox(
+                        expanded = platesLocExpanded,
+                        onExpandedChange = { platesLocExpanded = !platesLocExpanded }
+                    ) {
+                        OutlinedTextField(
+                            value = platesLocation,
+                            onValueChange = { platesLocation = it },
+                            label = { Text("Lugar de procedencia de placas") },
+                            placeholder = { Text("Seleccione o escriba el estado") },
+                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = platesLocExpanded) },
+                            modifier = Modifier
+                                .menuAnchor()
+                                .fillMaxWidth()
+                                .testTag("plates_loc_input"),
+                            singleLine = true
+                        )
+                        ExposedDropdownMenu(
+                            expanded = platesLocExpanded,
+                            onDismissRequest = { platesLocExpanded = false }
+                        ) {
+                            val filteredStates = allowedStates.filter {
+                                it.contains(platesLocation, ignoreCase = true)
+                            }
+                            if (filteredStates.isNotEmpty()) {
+                                filteredStates.forEach { state ->
+                                    DropdownMenuItem(
+                                        text = { Text(state) },
+                                        onClick = {
+                                            platesLocation = state
+                                            platesLocExpanded = false
+                                        }
+                                    )
+                                }
+                            } else {
+                                allowedStates.forEach { state ->
+                                    DropdownMenuItem(
+                                        text = { Text(state) },
+                                        onClick = {
+                                            platesLocation = state
+                                            platesLocExpanded = false
+                                        }
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Fecha de Recepción
+                item {
                     OutlinedTextField(
-                        value = platesLocation,
-                        onValueChange = { platesLocation = it },
-                        label = { Text("Lugar de procedencia de placas") },
-                        placeholder = { Text("Ej. Nuevo León / México") },
+                        value = receptionDate,
+                        onValueChange = { receptionDate = it },
+                        label = { Text("Fecha de Recepción") },
+                        placeholder = { Text("Ej. 2026-06-27") },
                         modifier = Modifier
                             .fillMaxWidth()
-                            .testTag("plates_loc_input"),
+                            .testTag("reception_date_input"),
+                        singleLine = true
+                    )
+                }
+
+                // Tipo de Material
+                item {
+                    OutlinedTextField(
+                        value = materialType ?: "FG",
+                        onValueChange = { materialType = it },
+                        label = { Text("Tipo de Material") },
+                        placeholder = { Text("Ej. FG") },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("material_type_input"),
                         singleLine = true
                     )
                 }
@@ -1926,16 +2047,59 @@ fun AddContainerDialog(
 
                     // Destino, Delivery, Fecha de procesado (for all loaded statuses)
                     item {
-                        OutlinedTextField(
-                            value = destination,
-                            onValueChange = { destination = it },
-                            label = { Text("Destino") },
-                            placeholder = { Text("Ej. Laredo, TX") },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .testTag("destination_input"),
-                            singleLine = true
+                        Text("Destino de Exportación", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                        var destExpanded by remember { mutableStateOf(false) }
+                        val exportDestinations = listOf(
+                            "CANADÁ", "UNITED KINGDOM", "FRANCE", "COREA", "JAPÓN", 
+                            "CHINA", "COLOMBIA", "KENTUKY", "GERMANY", "SWEDEN", 
+                            "KN", "NZ", "PERRIS", "POLONIA", "DSV"
                         )
+                        ExposedDropdownMenuBox(
+                            expanded = destExpanded,
+                            onExpandedChange = { destExpanded = !destExpanded }
+                        ) {
+                            OutlinedTextField(
+                                value = destination,
+                                onValueChange = { destination = it },
+                                label = { Text("Destino") },
+                                placeholder = { Text("Seleccione o escriba el destino") },
+                                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = destExpanded) },
+                                modifier = Modifier
+                                    .menuAnchor()
+                                    .fillMaxWidth()
+                                    .testTag("destination_input"),
+                                singleLine = true
+                            )
+                            ExposedDropdownMenu(
+                                expanded = destExpanded,
+                                onDismissRequest = { destExpanded = false }
+                            ) {
+                                val filteredDestinations = exportDestinations.filter {
+                                    it.contains(destination, ignoreCase = true)
+                                }
+                                if (filteredDestinations.isNotEmpty()) {
+                                    filteredDestinations.forEach { destOption ->
+                                        DropdownMenuItem(
+                                            text = { Text(destOption) },
+                                            onClick = {
+                                                destination = destOption
+                                                destExpanded = false
+                                            }
+                                        )
+                                    }
+                                } else {
+                                    exportDestinations.forEach { destOption ->
+                                        DropdownMenuItem(
+                                            text = { Text(destOption) },
+                                            onClick = {
+                                                destination = destOption
+                                                destExpanded = false
+                                            }
+                                        )
+                                    }
+                                }
+                            }
+                        }
                     }
 
                     item {
@@ -2011,7 +2175,11 @@ fun AddContainerDialog(
                                     containerSize,
                                     destination,
                                     deliveryDocument,
-                                    if (loadStatus == "Falta por completar" || loadStatus == "Falta por procesar") "" else processedDate
+                                    if (loadStatus == "Falta por completar" || loadStatus == "Falta por procesar") "" else processedDate,
+                                    isStorageOnly,
+                                    if (type == "Caja Seca") mexCalType else null,
+                                    receptionDate,
+                                    materialType
                                 )
                             },
                             enabled = economicNumber.isNotBlank(),
@@ -2374,7 +2542,7 @@ fun shareFile(context: Context, file: File) {
     val uri = FileProvider.getUriForFile(context, authority, file)
 
     val intent = Intent(Intent.ACTION_SEND).apply {
-        type = "text/csv"
+        type = if (file.name.endsWith(".xls")) "application/vnd.ms-excel" else "text/csv"
         putExtra(Intent.EXTRA_STREAM, uri)
         putExtra(Intent.EXTRA_SUBJECT, "Reporte de Control de Andenes - ${file.name}")
         putExtra(Intent.EXTRA_TEXT, "Adjunto se encuentra el reporte diario de control de andenes e inventario.")

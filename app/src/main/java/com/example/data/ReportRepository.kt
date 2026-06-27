@@ -73,87 +73,7 @@ class ReportRepository(private val dao: ReportDao) {
         val dockConditions = dao.getDockConditions(reportId)
         val damagedBoxes = dao.getDamagedBoxes(reportId)
 
-        val csv = StringBuilder()
-
-        // Section 1: Header
-        csv.append("REPORTE DIARIO DE CONTROL DE ANDENES E INVENTARIO\n")
-        csv.append("Fecha:,$reportId\n")
-        csv.append("Generado:,,${SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date())}\n\n")
-
-        // Section 2: Containers
-        csv.append("1. INVENTARIO DE CAJAS SECAS, INTERMODALES Y MARITIMOS (ANDENES Y PATIO)\n")
-        csv.append("Ubicacion,Anden,Categoria,Tipo,No. Economico,Placas,Lugar Placas,Compania,Medida Contenedor,Estado,Progreso de Carga,Codigo Sello,Destino,Delivery o Documento,Fecha Procesado\n")
-        for (c in containers) {
-            val location = c.locationType
-            val dockNum = c.dockNumber?.toString() ?: ""
-            val category = c.dockCategory ?: ""
-            val type = c.type
-            val eco = c.economicNumber.replace(",", ";").replace("\n", " ")
-            val plates = c.plates.replace(",", ";").replace("\n", " ")
-            val platesLoc = c.platesLocation.replace(",", ";").replace("\n", " ")
-            val comp = c.company
-            val size = c.containerSize ?: ""
-            val status = c.status
-            val loadStatus = c.loadStatus ?: ""
-            val seal = c.sealCode ?: ""
-            val dest = c.destination ?: ""
-            val doc = c.deliveryDocument ?: ""
-            val procDate = c.processedDate ?: ""
-
-            csv.append("$location,$dockNum,$category,$type,$eco,$plates,$platesLoc,$comp,$size,$status,$loadStatus,$seal,$dest,$doc,$procDate\n")
-        }
-        csv.append("\n")
-
-        // Section 3: Dock Conditions
-        csv.append("2. REPORTE DE CONDICION DE ANDENES (1 AL 14)\n")
-        csv.append("Anden,Tipo Anden,Fuera de Servicio,Rampa,Seguro de Rampa,Gancho,Cortina,Shelter,Gomas,Topes Seguridad,Semaforo,Luces,Notas\n")
-        for (d in dockConditions) {
-            val typeStr = if (d.dockNumber in 1..9) "Exportacion (1-9)" else "Recibos/FG (10-14)"
-            val oos = if (d.isOutOfService) "SI" else "NO"
-            val rampa = if (d.isRampGood) "BIEN" else "MAL"
-            val seguro = if (d.isRampLockGood) "BIEN" else "MAL"
-            val gancho = if (d.isDockHookGood) "BIEN" else "MAL"
-            val cortina = if (d.isCurtainGood) "BIEN" else "MAL"
-            val shelter = if (d.isShelterGood) "BIEN" else "MAL"
-            val gomas = if (d.isRubbersGood) "BIEN" else "MAL"
-            val topes = if (d.isSafetyStoppersGood) "BIEN" else "MAL"
-            val semaforo = if (d.isTrafficLightsGood) "BIEN" else "MAL"
-            val luces = if (d.isLightsGood) "BIEN" else "MAL"
-            val notes = d.notes.replace(",", ";").replace("\n", " ")
-
-            csv.append("${d.dockNumber},$typeStr,$oos,$rampa,$seguro,$gancho,$cortina,$shelter,$gomas,$topes,$semaforo,$luces,$notes\n")
-        }
-        csv.append("\n")
-
-        // Section 4: Damaged Boxes
-        csv.append("3. REPORTE DE CAJAS Y CONTENEDORES DAÑADOS\n")
-        csv.append("No. Economico,Tipo de Unidad,Descripcion del Danio,Fecha Reporte\n")
-        for (b in damagedBoxes) {
-            val eco = b.economicNumber.replace(",", ";").replace("\n", " ")
-            val type = b.type
-            val desc = b.damageDescription.replace(",", ";").replace("\n", " ")
-            val dateStr = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()).format(Date(b.timestamp))
-
-            csv.append("$eco,$type,$desc,$dateStr\n")
-        }
-
-        return csv.toString()
-    }
-
-    suspend fun saveCsvToFile(context: Context, reportId: String, content: String): File {
-        return withContext(Dispatchers.IO) {
-            val fileName = "Reporte_Andenes_${reportId}.csv"
-            val file = File(context.getExternalFilesDir(null), fileName)
-            FileOutputStream(file).use { out ->
-                out.write(content.toByteArray(Charsets.UTF_8))
-            }
-            file
-        }
-    }
-
-    suspend fun generateContainersCsvString(reportId: String): String {
-        val containers = dao.getContainersForReport(reportId)
-        val csv = StringBuilder()
+        val html = StringBuilder()
 
         val dateParser = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
         val dateOutFormatter = SimpleDateFormat("d-MMM-yy", Locale("es", "ES"))
@@ -172,114 +92,26 @@ class ReportRepository(private val dao: ReportDao) {
             }
         }
 
-        // --- SECCIÓN 1: INVENTARIO DE CAJAS 2026 (Andenes 1 al 14) ---
-        csv.append("INVENTARIO DE CAJAS 2026\n")
-        csv.append("Anden,Fecha De Entrada,Disposicion,No. Economico,Tipo Material,Placas,Origen de Placas,Compañia,Operacion,Destino,Fecha de Procesado,Deliverys,Numero de Sello colocado,Comentarios\n")
-        
-        // Group andenes
-        val andenesMap = containers.filter { it.locationType == "Andén" && it.dockNumber != null }
-            .associateBy { it.dockNumber!! }
-
-        for (i in 1..14) {
-            val c = andenesMap[i]
-            if (c != null) {
-                val dateIn = formatTs(c.timestamp)
-                val status = c.status.uppercase()
-                val eco = c.economicNumber.replace(",", ";").replace("\n", " ")
-                val tipoMat = "FG"
-                val plates = c.plates.replace(",", ";").replace("\n", " ")
-                val platesLoc = c.platesLocation.replace(",", ";").replace("\n", " ")
-                val comp = c.company.replace(",", ";").replace("\n", " ")
-                
-                val operacion = if (comp.uppercase().contains("MEX-CAL")) {
-                    if (c.destination?.uppercase() == "EXPORTACION") "EXPORTACION" else "INTERPLANTA"
-                } else {
-                    "EXPORTACION"
-                }
-
-                val dest = c.destination?.replace(",", ";") ?: ""
-                
-                // processedDate should be empty for "Falta por completar" or "Falta por procesar"
-                val procDate = if (c.loadStatus == "Falta por completar" || c.loadStatus == "Falta por procesar") {
-                    ""
-                } else {
-                    c.processedDate ?: ""
-                }
-
-                val doc = c.deliveryDocument?.replace(",", ";") ?: ""
-                val seal = c.sealCode ?: ""
-                
-                val comments = when (c.loadStatus) {
-                    "Falta por completar" -> "PENDIENTE POR COMPLETAR"
-                    "Falta por procesar" -> "PENDIENTE POR PROCESAR"
-                    "En espera de salida" -> "EN ESPERA DE SALIDA"
-                    else -> "-"
-                }
-
-                csv.append("$i,$dateIn,$status,$eco,$tipoMat,$plates,$platesLoc,$comp,$operacion,$dest,$procDate,$doc,$seal,$comments\n")
-            } else {
-                // empty row
-                csv.append("$i,-,-,-,-,-,-,-,-,-,-,-,-,-\n")
-            }
-        }
-        
-        csv.append("\n\n")
-
-        // --- SECCIÓN 2: YARDA DE MXDC( PATIO) ---
-        csv.append("YARDA DE MXDC( PATIO)\n")
-        csv.append("#,Fecha,Disposicion,No. Economico,Tipo,Placas,Origen de Placas,Compañia,Operacion,DESTINO,Fecha de Procesado,Deliverys,Numero de Sello colocado,comentarios\n")
-        
-        val patioContainers = containers.filter { it.locationType == "Patio" }
-        for (c in patioContainers) {
-            val dateIn = formatTs(c.timestamp)
-            val status = c.status.uppercase()
-            val eco = c.economicNumber.replace(",", ";").replace("\n", " ")
-            val tipoMat = "FG"
-            val plates = c.plates.replace(",", ";").replace("\n", " ")
-            val platesLoc = c.platesLocation.replace(",", ";").replace("\n", " ")
-            val comp = c.company.replace(",", ";").replace("\n", " ")
-
-            val operacion = if (comp.uppercase().contains("MEX-CAL")) {
-                if (c.destination?.uppercase() == "EXPORTACION") "EXPORTACION" else "INTERPLANTA"
-            } else {
-                "EXPORTACION"
-            }
-
-            val dest = c.destination?.replace(",", ";") ?: ""
-            
-            val procDate = if (c.loadStatus == "Falta por completar" || c.loadStatus == "Falta por procesar") {
-                ""
-            } else {
-                c.processedDate ?: ""
-            }
-
-            val doc = c.deliveryDocument?.replace(",", ";") ?: ""
-            val seal = c.sealCode ?: ""
-
-            val comments = when (c.loadStatus) {
-                "Falta por completar" -> "PENDIENTE POR COMPLETAR"
-                "Falta por procesar" -> "PENDIENTE POR PROCESAR"
-                "En espera de salida" -> "EN ESPERA DE SALIDA"
-                else -> "-"
-            }
-
-            csv.append(",$dateIn,$status,$eco,$tipoMat,$plates,$platesLoc,$comp,$operacion,$dest,$procDate,$doc,$seal,$comments\n")
+        fun escapeHtml(str: String): String {
+            return str.replace("&", "&amp;")
+                .replace("<", "&lt;")
+                .replace(">", "&gt;")
+                .replace("\"", "&quot;")
+                .replace("'", "&#39;")
         }
 
-        csv.append("\n\n")
-
-        // --- SECCIÓN 3: RESUMEN / TOTALES ---
-        csv.append("Fecha de conteo,Descripcion,Cantidad\n")
-        
+        // --- CALCULATE SUMMARY TOTALS ---
         val countExportacion = containers.count {
             it.status.uppercase().startsWith("CARG") &&
             it.loadStatus == "En espera de salida" &&
-            !it.company.uppercase().contains("MEX-CAL")
+            !it.company.uppercase().contains("MEX-CAL") &&
+            !it.company.uppercase().contains("ALMACENAJE") &&
+            !it.isStorageOnly
         }
         val countAlmacenaje = containers.count {
-            it.status.uppercase().startsWith("CARG") &&
+            it.isStorageOnly || (it.status.uppercase().startsWith("CARG") &&
             it.loadStatus == "En espera de salida" &&
-            it.company.uppercase().contains("ALMACENAJE")
+            it.company.uppercase().contains("ALMACENAJE"))
         }
         val countFgRecibos = containers.count {
             it.status.uppercase().startsWith("CARG") &&
@@ -311,65 +143,1037 @@ class ReportRepository(private val dao: ReportDao) {
             (it.loadStatus == "Falta por completar" || it.loadStatus == "Falta por procesar")
         }
 
-        csv.append("$formattedReportDate,Exportacion,$countExportacion\n")
-        csv.append(",Almacenaje,$countAlmacenaje\n")
-        csv.append(",FG Recibos,$countFgRecibos\n")
-        csv.append(",Intermodal vacio,$countIntermodalVacio\n")
-        csv.append(",Mex - cal mxdc vacio,$countMexCalMxdcVacio\n")
-        csv.append(",Mex - cal export vacio,$countMexCalExportVacio\n")
-        csv.append(",Contenedor vacio,$countContenedorVacio\n")
-        csv.append(",Pendientes,$countPendientes\n")
+        html.append("<html>\n")
+        html.append("<head>\n")
+        html.append("<meta http-equiv=\"Content-Type\" content=\"text/html; charset=utf-8\">\n")
+        html.append("<!--[if gte mso 9]>\n")
+        html.append("<xml>\n")
+        html.append(" <x:ExcelWorkbook>\n")
+        html.append("  <x:ExcelWorksheets>\n")
+        html.append("   <x:ExcelWorksheet>\n")
+        html.append("    <x:Name>Reporte Completo</x:Name>\n")
+        html.append("    <x:WorksheetOptions>\n")
+        html.append("     <x:DisplayGridlines/>\n")
+        html.append("    </x:WorksheetOptions>\n")
+        html.append("   </x:ExcelWorksheet>\n")
+        html.append("  </x:ExcelWorksheets>\n")
+        html.append(" </x:ExcelWorkbook>\n")
+        html.append("</xml>\n")
+        html.append("<![endif]-->\n")
+        html.append("<style>\n")
+        html.append("  table { border-collapse: collapse; font-family: Calibri, sans-serif; font-size: 11pt; border: 1px solid #000000; margin-bottom: 25px; }\n")
+        html.append("  th { border: 1px solid #000000; padding: 6px; font-weight: bold; text-align: center; vertical-align: middle; background-color: #00B0F0; color: #FFFFFF; }\n")
+        html.append("  td { border: 1px solid #7F7F7F; padding: 5px; text-align: center; vertical-align: middle; }\n")
+        html.append("  .title-main { font-size: 18pt; font-weight: bold; border: none; text-align: center; height: 45px; background-color: #FFFFFF; color: #000000; }\n")
+        html.append("  .title-sec { font-size: 18pt; font-weight: bold; border: none; text-align: center; height: 45px; background-color: #FFFFFF; color: #000000; }\n")
+        html.append("  .anden-cell { background-color: #00B0F0; color: #FFFFFF; font-weight: bold; border: 1px solid #000000; }\n")
+        
+        // Color classes
+        html.append("  .color-exportacion { background-color: #92D050; color: #000000; }\n")      // Light green
+        html.append("  .color-almacenaje { background-color: #9BC2E6; color: #000000; }\n")       // Light blue
+        html.append("  .color-fg-recibos { background-color: #FFC000; color: #000000; }\n")       // Amber/Orange
+        html.append("  .color-intermodal-vacio { background-color: #C6E0B4; color: #000000; }\n") // Pale green
+        html.append("  .color-mexcal-mxdc-vacio { background-color: #FCE4D6; color: #000000; }\n")// Soft peach
+        html.append("  .color-mexcal-export-vacio { background-color: #FFFF00; color: #000000; }\n")// Yellow
+        html.append("  .color-contenedor-vacio { background-color: #E19CD2; color: #000000; }\n") // Lavender
+        html.append("  .color-pendientes { background-color: #FFFFFF; color: #000000; }\n")       // White
+        html.append("  .color-empty { background-color: #FFFFFF; color: #000000; }\n")
+        
+        // Dock specific
+        html.append("  .status-bien { background-color: #C6E0B4; color: #375623; font-weight: bold; }\n")
+        html.append("  .status-mal { background-color: #F8CBAD; color: #C65911; font-weight: bold; }\n")
+        html.append("  .status-oos { background-color: #FFC000; color: #000000; font-weight: bold; }\n")
+        html.append("  .status-normal { background-color: #FFFFFF; color: #000000; }\n")
+        
+        // Damaged specific
+        html.append("  .th-damaged { background-color: #ED7D31; color: #FFFFFF; }\n")
+        html.append("  .title-damaged { font-size: 16pt; font-weight: bold; border: none; text-align: center; height: 40px; background-color: #FFFFFF; color: #C00000; }\n")
+        
+        html.append("  .bold { font-weight: bold; }\n")
+        html.append("</style>\n")
+        html.append("</head>\n")
+        html.append("<body>\n")
 
-        return csv.toString()
+        // --- SECTION 1: INVENTARIO DE CAJAS 2026 ---
+        html.append("<table>\n")
+        html.append("  <tr>\n")
+        html.append("    <td colspan=\"15\" class=\"title-main\">REPORTE COMPLETO: INVENTARIO DE CAJAS 2026</td>\n")
+        html.append("  </tr>\n")
+        html.append("  <tr>\n")
+        html.append("    <th>Anden</th>\n")
+        html.append("    <th>Fecha De Entrada</th>\n")
+        html.append("    <th>Disposicion</th>\n")
+        html.append("    <th>No. Economico</th>\n")
+        html.append("    <th>Tipo Material</th>\n")
+        html.append("    <th>Placas</th>\n")
+        html.append("    <th>Origen de Placas</th>\n")
+        html.append("    <th>Compañía</th>\n")
+        html.append("    <th>Operacion</th>\n")
+        html.append("    <th>Destino</th>\n")
+        html.append("    <th>Fecha de Procesado</th>\n")
+        html.append("    <th>Deliverys</th>\n")
+        html.append("    <th>Numero de Sello colocado</th>\n")
+        html.append("    <th colspan=\"2\">Comentarios</th>\n")
+        html.append("  </tr>\n")
+
+        val andenesMap = containers.filter { it.locationType == "Andén" && it.dockNumber != null }
+            .associateBy { it.dockNumber!! }
+
+        for (i in 1..14) {
+            val c = andenesMap[i]
+            if (c != null) {
+                val dateIn = if (!c.receptionDate.isNullOrBlank()) escapeHtml(c.receptionDate) else formatTs(c.timestamp)
+                val status = c.status.uppercase()
+                val eco = escapeHtml(c.economicNumber)
+                val tipoMat = escapeHtml(c.materialType ?: "FG")
+                val plates = escapeHtml(c.plates)
+                val platesLoc = escapeHtml(c.platesLocation)
+                val comp = escapeHtml(c.company)
+                
+                val operacion = if (comp.uppercase().contains("MEX-CAL")) {
+                    c.mexCalType?.uppercase() ?: if (c.destination?.uppercase() == "EXPORTACION") "EXPORTACION" else "INTERPLANTA"
+                } else {
+                    "EXPORTACION"
+                }
+
+                val dest = escapeHtml(c.destination ?: "")
+                
+                val procDate = if (c.loadStatus == "Falta por completar" || c.loadStatus == "Falta por procesar") {
+                    ""
+                } else {
+                    c.processedDate ?: ""
+                }
+
+                val doc = escapeHtml(c.deliveryDocument ?: "")
+                val seal = escapeHtml(c.sealCode ?: "")
+                
+                val comments = when (c.loadStatus) {
+                    "Falta por completar" -> "PENDIENTE POR COMPLETAR"
+                    "Falta por procesar" -> "PENDIENTE POR PROCESAR"
+                    "En espera de salida" -> "EN ESPERA DE SALIDA"
+                    else -> "-"
+                }
+
+                val rowClass = when {
+                    status.startsWith("VAC") -> {
+                        when {
+                            c.type == "Intermodal" -> "color-intermodal-vacio"
+                            c.type == "Contenedor Marítimo" -> "color-contenedor-vacio"
+                            comp.uppercase().contains("MEX-CAL") -> {
+                                if (dest.uppercase() == "MXDC") "color-mexcal-mxdc-vacio" else "color-mexcal-export-vacio"
+                            }
+                            else -> "color-empty"
+                        }
+                    }
+                    status.startsWith("CARG") -> {
+                        if (c.loadStatus == "En espera de salida") {
+                            when {
+                                c.isStorageOnly || comp.uppercase().contains("ALMACENAJE") -> "color-almacenaje"
+                                i in 10..14 -> "color-fg-recibos"
+                                else -> "color-exportacion"
+                            }
+                        } else {
+                            "color-pendientes"
+                        }
+                    }
+                    else -> "color-empty"
+                }
+
+                html.append("  <tr class=\"$rowClass\">\n")
+                html.append("    <td class=\"anden-cell\">$i</td>\n")
+                html.append("    <td>$dateIn</td>\n")
+                html.append("    <td>$status</td>\n")
+                html.append("    <td>$eco</td>\n")
+                html.append("    <td>$tipoMat</td>\n")
+                html.append("    <td>$plates</td>\n")
+                html.append("    <td>$platesLoc</td>\n")
+                html.append("    <td>$comp</td>\n")
+                html.append("    <td>$operacion</td>\n")
+                html.append("    <td>$dest</td>\n")
+                html.append("    <td>$procDate</td>\n")
+                html.append("    <td>$doc</td>\n")
+                html.append("    <td>$seal</td>\n")
+                html.append("    <td colspan=\"2\">$comments</td>\n")
+                html.append("  </tr>\n")
+            } else {
+                html.append("  <tr class=\"color-empty\">\n")
+                html.append("    <td class=\"anden-cell\">$i</td>\n")
+                html.append("    <td>-</td>\n")
+                html.append("    <td>-</td>\n")
+                html.append("    <td>-</td>\n")
+                html.append("    <td>-</td>\n")
+                html.append("    <td>-</td>\n")
+                html.append("    <td>-</td>\n")
+                html.append("    <td>-</td>\n")
+                html.append("    <td>-</td>\n")
+                html.append("    <td>-</td>\n")
+                html.append("    <td>-</td>\n")
+                html.append("    <td>-</td>\n")
+                html.append("    <td>-</td>\n")
+                html.append("    <td colspan=\"2\">-</td>\n")
+                html.append("  </tr>\n")
+            }
+        }
+        html.append("</table>\n")
+
+        html.append("<br><br>\n")
+
+        // --- SECTION 2: YARDA DE MXDC( PATIO) ---
+        html.append("<table>\n")
+        html.append("  <tr>\n")
+        html.append("    <td colspan=\"15\" class=\"title-sec\">YARDA DE MXDC( PATIO)</td>\n")
+        html.append("  </tr>\n")
+        html.append("  <tr>\n")
+        html.append("    <th>#</th>\n")
+        html.append("    <th>Fecha</th>\n")
+        html.append("    <th>Disposicion</th>\n")
+        html.append("    <th>No. Economico</th>\n")
+        html.append("    <th>Tipo</th>\n")
+        html.append("    <th>Placas</th>\n")
+        html.append("    <th>Origen de Placas</th>\n")
+        html.append("    <th>Compañia</th>\n")
+        html.append("    <th>Operacion</th>\n")
+        html.append("    <th>DESTINO</th>\n")
+        html.append("    <th>Fecha de Procesado</th>\n")
+        html.append("    <th>Deliverys</th>\n")
+        html.append("    <th>Numero de Sello colocado</th>\n")
+        html.append("    <th colspan=\"2\">comentarios</th>\n")
+        html.append("  </tr>\n")
+
+        val patioContainers = containers.filter { it.locationType == "Patio" }
+        for (c in patioContainers) {
+            val dateIn = if (!c.receptionDate.isNullOrBlank()) escapeHtml(c.receptionDate) else formatTs(c.timestamp)
+            val status = c.status.uppercase()
+            val eco = escapeHtml(c.economicNumber)
+            val tipoMat = escapeHtml(c.materialType ?: "FG")
+            val plates = escapeHtml(c.plates)
+            val platesLoc = escapeHtml(c.platesLocation)
+            val comp = escapeHtml(c.company)
+
+            val operacion = if (comp.uppercase().contains("MEX-CAL")) {
+                c.mexCalType?.uppercase() ?: if (c.destination?.uppercase() == "EXPORTACION") "EXPORTACION" else "INTERPLANTA"
+            } else {
+                "EXPORTACION"
+            }
+
+            val dest = escapeHtml(c.destination ?: "")
+            
+            val procDate = if (c.loadStatus == "Falta por completar" || c.loadStatus == "Falta por procesar") {
+                ""
+            } else {
+                c.processedDate ?: ""
+            }
+
+            val doc = escapeHtml(c.deliveryDocument ?: "")
+            val seal = escapeHtml(c.sealCode ?: "")
+
+            val comments = when (c.loadStatus) {
+                "Falta por completar" -> "PENDIENTE POR COMPLETAR"
+                "Falta por procesar" -> "PENDIENTE POR PROCESAR"
+                "En espera de salida" -> "EN ESPERA DE SALIDA"
+                else -> "-"
+            }
+
+            val rowClass = when {
+                status.startsWith("VAC") -> {
+                    when {
+                        c.type == "Intermodal" -> "color-intermodal-vacio"
+                        c.type == "Contenedor Marítimo" -> "color-contenedor-vacio"
+                        comp.uppercase().contains("MEX-CAL") -> {
+                            if (dest.uppercase() == "MXDC") "color-mexcal-mxdc-vacio" else "color-mexcal-export-vacio"
+                        }
+                        else -> "color-empty"
+                    }
+                }
+                status.startsWith("CARG") -> {
+                    if (c.loadStatus == "En espera de salida") {
+                        if (c.isStorageOnly || comp.uppercase().contains("ALMACENAJE")) "color-almacenaje" else "color-exportacion"
+                    } else {
+                        "color-pendientes"
+                    }
+                }
+                else -> "color-empty"
+            }
+
+            html.append("  <tr class=\"$rowClass\">\n")
+            html.append("    <td class=\"bold\"></td>\n")
+            html.append("    <td>$dateIn</td>\n")
+            html.append("    <td>$status</td>\n")
+            html.append("    <td>$eco</td>\n")
+            html.append("    <td>$tipoMat</td>\n")
+            html.append("    <td>$plates</td>\n")
+            html.append("    <td>$platesLoc</td>\n")
+            html.append("    <td>$comp</td>\n")
+            html.append("    <td>$operacion</td>\n")
+            html.append("    <td>$dest</td>\n")
+            html.append("    <td>$procDate</td>\n")
+            html.append("    <td>$doc</td>\n")
+            html.append("    <td>$seal</td>\n")
+            html.append("    <td colspan=\"2\">$comments</td>\n")
+            html.append("  </tr>\n")
+        }
+        html.append("</table>\n")
+
+        html.append("<br><br>\n")
+
+        // --- SECTION 3: RESUMEN / TOTALES ---
+        html.append("<table style=\"width: 450px;\">\n")
+        html.append("  <tr>\n")
+        html.append("    <th style=\"width: 150px;\">Fecha de conteo</th>\n")
+        html.append("    <th style=\"width: 200px;\">Descripcion</th>\n")
+        html.append("    <th style=\"width: 100px;\">Cantidad</th>\n")
+        html.append("  </tr>\n")
+        html.append("  <tr>\n")
+        html.append("    <td rowspan=\"8\" class=\"bold\" style=\"font-size: 11pt; background-color: #FFFFFF;\">$formattedReportDate</td>\n")
+        html.append("    <td class=\"color-exportacion bold\">Exportacion</td>\n")
+        html.append("    <td class=\"bold\">$countExportacion</td>\n")
+        html.append("  </tr>\n")
+        html.append("  <tr>\n")
+        html.append("    <td class=\"color-almacenaje bold\">Almacenaje</td>\n")
+        html.append("    <td class=\"bold\">$countAlmacenaje</td>\n")
+        html.append("  </tr>\n")
+        html.append("  <tr>\n")
+        html.append("    <td class=\"color-fg-recibos bold\">FG Recibos</td>\n")
+        html.append("    <td class=\"bold\">$countFgRecibos</td>\n")
+        html.append("  </tr>\n")
+        html.append("  <tr>\n")
+        html.append("    <td class=\"color-intermodal-vacio bold\">Intermodal vacio</td>\n")
+        html.append("    <td class=\"bold\">$countIntermodalVacio</td>\n")
+        html.append("  </tr>\n")
+        html.append("  <tr>\n")
+        html.append("    <td class=\"color-mexcal-mxdc-vacio bold\">Mex - cal mxdc vacio</td>\n")
+        html.append("    <td class=\"bold\">$countMexCalMxdcVacio</td>\n")
+        html.append("  </tr>\n")
+        html.append("  <tr>\n")
+        html.append("    <td class=\"color-mexcal-export-vacio bold\">Mex - cal export vacio</td>\n")
+        html.append("    <td class=\"bold\">$countMexCalExportVacio</td>\n")
+        html.append("  </tr>\n")
+        html.append("  <tr>\n")
+        html.append("    <td class=\"color-contenedor-vacio bold\">Contenedor vacio</td>\n")
+        html.append("    <td class=\"bold\">$countContenedorVacio</td>\n")
+        html.append("  </tr>\n")
+        html.append("  <tr>\n")
+        html.append("    <td class=\"bold\" style=\"background-color: #FFFFFF;\">Pendientes</td>\n")
+        html.append("    <td class=\"bold\">$countPendientes</td>\n")
+        html.append("  </tr>\n")
+        html.append("</table>\n")
+
+        html.append("<br><br>\n")
+
+        // --- SECTION 4: CONDICION DE ANDENES ---
+        html.append("<table>\n")
+        html.append("  <tr>\n")
+        html.append("    <td colspan=\"13\" class=\"title-sec\">REPORTE DIARIO DE CONDICION DE ANDENES (1 AL 14)</td>\n")
+        html.append("  </tr>\n")
+        html.append("  <tr>\n")
+        html.append("    <th>Anden</th>\n")
+        html.append("    <th>Tipo Anden</th>\n")
+        html.append("    <th>Fuera de Servicio</th>\n")
+        html.append("    <th>Rampa</th>\n")
+        html.append("    <th>Seguro de Rampa</th>\n")
+        html.append("    <th>Gancho</th>\n")
+        html.append("    <th>Cortina</th>\n")
+        html.append("    <th>Shelter</th>\n")
+        html.append("    <th>Gomas</th>\n")
+        html.append("    <th>Topes Seguridad</th>\n")
+        html.append("    <th>Semaforo</th>\n")
+        html.append("    <th>Luces</th>\n")
+        html.append("    <th>Notas</th>\n")
+        html.append("  </tr>\n")
+
+        for (d in dockConditions) {
+            val typeStr = if (d.dockNumber in 1..9) "Exportacion (1-9)" else "Recibos/FG (10-14)"
+            
+            val oosClass = if (d.isOutOfService) "status-oos" else "status-normal"
+            val oosText = if (d.isOutOfService) "SI" else "NO"
+            
+            fun getStatusClass(isGood: Boolean) = if (isGood) "status-bien" else "status-mal"
+            fun getStatusText(isGood: Boolean) = if (isGood) "BIEN" else "MAL"
+
+            val rampaClass = getStatusClass(d.isRampGood)
+            val rampaText = getStatusText(d.isRampGood)
+
+            val seguroClass = getStatusClass(d.isRampLockGood)
+            val seguroText = getStatusText(d.isRampLockGood)
+
+            val ganchoClass = getStatusClass(d.isDockHookGood)
+            val ganchoText = getStatusText(d.isDockHookGood)
+
+            val cortinaClass = getStatusClass(d.isCurtainGood)
+            val cortinaText = getStatusText(d.isCurtainGood)
+
+            val shelterClass = getStatusClass(d.isShelterGood)
+            val shelterText = getStatusText(d.isShelterGood)
+
+            val gomasClass = getStatusClass(d.isRubbersGood)
+            val gomasText = getStatusText(d.isRubbersGood)
+
+            val topesClass = getStatusClass(d.isSafetyStoppersGood)
+            val topesText = getStatusText(d.isSafetyStoppersGood)
+
+            val semaforoClass = getStatusClass(d.isTrafficLightsGood)
+            val semaforoText = getStatusText(d.isTrafficLightsGood)
+
+            val lucesClass = getStatusClass(d.isLightsGood)
+            val lucesText = getStatusText(d.isLightsGood)
+
+            val notes = escapeHtml(d.notes)
+
+            html.append("  <tr>\n")
+            html.append("    <td class=\"bold\">${d.dockNumber}</td>\n")
+            html.append("    <td>$typeStr</td>\n")
+            html.append("    <td class=\"$oosClass\">$oosText</td>\n")
+            html.append("    <td class=\"$rampaClass\">$rampaText</td>\n")
+            html.append("    <td class=\"$seguroClass\">$seguroText</td>\n")
+            html.append("    <td class=\"$ganchoClass\">$ganchoText</td>\n")
+            html.append("    <td class=\"$cortinaClass\">$cortinaText</td>\n")
+            html.append("    <td class=\"$shelterClass\">$shelterText</td>\n")
+            html.append("    <td class=\"$gomasClass\">$gomasText</td>\n")
+            html.append("    <td class=\"$topesClass\">$topesText</td>\n")
+            html.append("    <td class=\"$semaforoClass\">$semaforoText</td>\n")
+            html.append("    <td class=\"$lucesClass\">$lucesText</td>\n")
+            html.append("    <td style=\"text-align: left;\">$notes</td>\n")
+            html.append("  </tr>\n")
+        }
+        html.append("</table>\n")
+
+        html.append("<br><br>\n")
+
+        // --- SECTION 5: CAJAS Y CONTENEDORES DAÑADOS ---
+        html.append("<table>\n")
+        html.append("  <tr>\n")
+        html.append("    <td colspan=\"4\" class=\"title-damaged\">REPORTE DIARIO DE CAJAS Y CONTENEDORES DAÑADOS</td>\n")
+        html.append("  </tr>\n")
+        html.append("  <tr>\n")
+        html.append("    <th class=\"th-damaged\">No. Economico</th>\n")
+        html.append("    <th class=\"th-damaged\">Tipo de Unidad</th>\n")
+        html.append("    <th class=\"th-damaged\">Descripcion del Daño</th>\n")
+        html.append("    <th class=\"th-damaged\">Fecha Reporte</th>\n")
+        html.append("  </tr>\n")
+
+        for (b in damagedBoxes) {
+            val eco = escapeHtml(b.economicNumber)
+            val type = escapeHtml(b.type)
+            val desc = escapeHtml(b.damageDescription)
+            val dateStr = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()).format(Date(b.timestamp))
+
+            html.append("  <tr>\n")
+            html.append("    <td class=\"bold\">$eco</td>\n")
+            html.append("    <td>$type</td>\n")
+            html.append("    <td style=\"text-align: left;\">$desc</td>\n")
+            html.append("    <td>$dateStr</td>\n")
+            html.append("  </tr>\n")
+        }
+        html.append("</table>\n")
+
+        html.append("</body>\n")
+        html.append("</html>\n")
+
+        return html.toString()
+    }
+
+    suspend fun saveCsvToFile(context: Context, reportId: String, content: String): File {
+        return withContext(Dispatchers.IO) {
+            val fileName = "Reporte_Andenes_${reportId}.xls"
+            val file = File(context.getExternalFilesDir(null), fileName)
+            FileOutputStream(file).use { out ->
+                out.write(content.toByteArray(Charsets.UTF_8))
+            }
+            file
+        }
+    }
+
+    suspend fun generateContainersCsvString(reportId: String): String {
+        val containers = dao.getContainersForReport(reportId)
+        val html = StringBuilder()
+
+        val dateParser = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+        val dateOutFormatter = SimpleDateFormat("d-MMM-yy", Locale("es", "ES"))
+        val formattedReportDate = try {
+            val d = dateParser.parse(reportId)
+            if (d != null) dateOutFormatter.format(d) else reportId
+        } catch (e: Exception) {
+            reportId
+        }
+
+        fun formatTs(ts: Long): String {
+            return try {
+                dateOutFormatter.format(Date(ts))
+            } catch (e: Exception) {
+                ""
+            }
+        }
+
+        fun escapeHtml(str: String): String {
+            return str.replace("&", "&amp;")
+                .replace("<", "&lt;")
+                .replace(">", "&gt;")
+                .replace("\"", "&quot;")
+                .replace("'", "&#39;")
+        }
+
+        // --- CALCULATE SUMMARY TOTALS ---
+        val countExportacion = containers.count {
+            it.status.uppercase().startsWith("CARG") &&
+            it.loadStatus == "En espera de salida" &&
+            !it.company.uppercase().contains("MEX-CAL") &&
+            !it.company.uppercase().contains("ALMACENAJE") &&
+            !it.isStorageOnly
+        }
+        val countAlmacenaje = containers.count {
+            it.isStorageOnly || (it.status.uppercase().startsWith("CARG") &&
+            it.loadStatus == "En espera de salida" &&
+            it.company.uppercase().contains("ALMACENAJE"))
+        }
+        val countFgRecibos = containers.count {
+            it.status.uppercase().startsWith("CARG") &&
+            it.loadStatus == "En espera de salida" &&
+            it.locationType == "Andén" &&
+            (it.dockNumber ?: 0) in 10..14
+        }
+        val countIntermodalVacio = containers.count {
+            it.type == "Intermodal" &&
+            it.status.uppercase().startsWith("VAC")
+        }
+        val countMexCalMxdcVacio = containers.count {
+            it.company.uppercase().contains("MEX-CAL") &&
+            it.status.uppercase().startsWith("VAC") &&
+            it.destination?.uppercase() == "MXDC"
+        }
+        val countMexCalExportVacio = containers.count {
+            it.company.uppercase().contains("MEX-CAL") &&
+            it.status.uppercase().startsWith("VAC") &&
+            it.destination?.uppercase() != "MXDC" &&
+            it.destination?.uppercase() != "PERRIS"
+        }
+        val countContenedorVacio = containers.count {
+            it.type == "Contenedor Marítimo" &&
+            it.status.uppercase().startsWith("VAC")
+        }
+        val countPendientes = containers.count {
+            it.status.uppercase().startsWith("CARG") &&
+            (it.loadStatus == "Falta por completar" || it.loadStatus == "Falta por procesar")
+        }
+
+        // Start HTML document
+        html.append("<html>\n")
+        html.append("<head>\n")
+        html.append("<meta http-equiv=\"Content-Type\" content=\"text/html; charset=utf-8\">\n")
+        html.append("<!--[if gte mso 9]>\n")
+        html.append("<xml>\n")
+        html.append(" <x:ExcelWorkbook>\n")
+        html.append("  <x:ExcelWorksheets>\n")
+        html.append("   <x:ExcelWorksheet>\n")
+        html.append("    <x:Name>Inventario de Cajas</x:Name>\n")
+        html.append("    <x:WorksheetOptions>\n")
+        html.append("     <x:DisplayGridlines/>\n")
+        html.append("    </x:WorksheetOptions>\n")
+        html.append("   </x:ExcelWorksheet>\n")
+        html.append("  </x:ExcelWorksheets>\n")
+        html.append(" </x:ExcelWorkbook>\n")
+        html.append("</xml>\n")
+        html.append("<![endif]-->\n")
+        html.append("<style>\n")
+        html.append("  table { border-collapse: collapse; font-family: Calibri, sans-serif; font-size: 11pt; border: 1px solid #000000; }\n")
+        html.append("  th { border: 1px solid #000000; padding: 6px; font-weight: bold; text-align: center; vertical-align: middle; background-color: #00B0F0; color: #FFFFFF; }\n")
+        html.append("  td { border: 1px solid #7F7F7F; padding: 5px; text-align: center; vertical-align: middle; }\n")
+        html.append("  .title-main { font-size: 18pt; font-weight: bold; border: none; text-align: center; height: 45px; background-color: #FFFFFF; color: #000000; }\n")
+        html.append("  .title-sec { font-size: 18pt; font-weight: bold; border: none; text-align: center; height: 45px; background-color: #FFFFFF; color: #000000; }\n")
+        html.append("  .anden-cell { background-color: #00B0F0; color: #FFFFFF; font-weight: bold; border: 1px solid #000000; }\n")
+        
+        // Color classes
+        html.append("  .color-exportacion { background-color: #92D050; color: #000000; }\n")      // Light green
+        html.append("  .color-almacenaje { background-color: #9BC2E6; color: #000000; }\n")       // Light blue
+        html.append("  .color-fg-recibos { background-color: #FFC000; color: #000000; }\n")       // Amber/Orange
+        html.append("  .color-intermodal-vacio { background-color: #C6E0B4; color: #000000; }\n") // Pale green
+        html.append("  .color-mexcal-mxdc-vacio { background-color: #FCE4D6; color: #000000; }\n")// Soft peach
+        html.append("  .color-mexcal-export-vacio { background-color: #FFFF00; color: #000000; }\n")// Yellow
+        html.append("  .color-contenedor-vacio { background-color: #E19CD2; color: #000000; }\n") // Lavender
+        html.append("  .color-pendientes { background-color: #FFFFFF; color: #000000; }\n")       // White
+        html.append("  .color-empty { background-color: #FFFFFF; color: #000000; }\n")
+        html.append("  .bold { font-weight: bold; }\n")
+        html.append("</style>\n")
+        html.append("</head>\n")
+        html.append("<body>\n")
+
+        // --- SECTION 1: INVENTARIO DE CAJAS 2026 ---
+        html.append("<table>\n")
+        html.append("  <tr>\n")
+        html.append("    <td colspan=\"15\" class=\"title-main\">INVENTARIO DE CAJAS 2026</td>\n")
+        html.append("  </tr>\n")
+        html.append("  <tr>\n")
+        html.append("    <th>Anden</th>\n")
+        html.append("    <th>Fecha De Entrada</th>\n")
+        html.append("    <th>Disposicion</th>\n")
+        html.append("    <th>No. Economico</th>\n")
+        html.append("    <th>Tipo Material</th>\n")
+        html.append("    <th>Placas</th>\n")
+        html.append("    <th>Origen de Placas</th>\n")
+        html.append("    <th>Compañía</th>\n")
+        html.append("    <th>Operacion</th>\n")
+        html.append("    <th>Destino</th>\n")
+        html.append("    <th>Fecha de Procesado</th>\n")
+        html.append("    <th>Deliverys</th>\n")
+        html.append("    <th>Numero de Sello colocado</th>\n")
+        html.append("    <th colspan=\"2\">Comentarios</th>\n")
+        html.append("  </tr>\n")
+
+        // Group andenes
+        val andenesMap = containers.filter { it.locationType == "Andén" && it.dockNumber != null }
+            .associateBy { it.dockNumber!! }
+
+        for (i in 1..14) {
+            val c = andenesMap[i]
+            if (c != null) {
+                val dateIn = if (!c.receptionDate.isNullOrBlank()) escapeHtml(c.receptionDate) else formatTs(c.timestamp)
+                val status = c.status.uppercase()
+                val eco = escapeHtml(c.economicNumber)
+                val tipoMat = escapeHtml(c.materialType ?: "FG")
+                val plates = escapeHtml(c.plates)
+                val platesLoc = escapeHtml(c.platesLocation)
+                val comp = escapeHtml(c.company)
+                
+                val operacion = if (comp.uppercase().contains("MEX-CAL")) {
+                    c.mexCalType?.uppercase() ?: if (c.destination?.uppercase() == "EXPORTACION") "EXPORTACION" else "INTERPLANTA"
+                } else {
+                    "EXPORTACION"
+                }
+
+                val dest = escapeHtml(c.destination ?: "")
+                
+                val procDate = if (c.loadStatus == "Falta por completar" || c.loadStatus == "Falta por procesar") {
+                    ""
+                } else {
+                    c.processedDate ?: ""
+                }
+
+                val doc = escapeHtml(c.deliveryDocument ?: "")
+                val seal = escapeHtml(c.sealCode ?: "")
+                
+                val comments = when (c.loadStatus) {
+                    "Falta por completar" -> "PENDIENTE POR COMPLETAR"
+                    "Falta por procesar" -> "PENDIENTE POR PROCESAR"
+                    "En espera de salida" -> "EN ESPERA DE SALIDA"
+                    else -> "-"
+                }
+
+                // Determine row background color class
+                val rowClass = when {
+                    status.startsWith("VAC") -> {
+                        when {
+                            c.type == "Intermodal" -> "color-intermodal-vacio"
+                            c.type == "Contenedor Marítimo" -> "color-contenedor-vacio"
+                            comp.uppercase().contains("MEX-CAL") -> {
+                                if (dest.uppercase() == "MXDC") "color-mexcal-mxdc-vacio" else "color-mexcal-export-vacio"
+                            }
+                            else -> "color-empty"
+                        }
+                    }
+                    status.startsWith("CARG") -> {
+                        if (c.loadStatus == "En espera de salida") {
+                            when {
+                                c.isStorageOnly || comp.uppercase().contains("ALMACENAJE") -> "color-almacenaje"
+                                i in 10..14 -> "color-fg-recibos"
+                                else -> "color-exportacion"
+                            }
+                        } else {
+                            "color-pendientes"
+                        }
+                    }
+                    else -> "color-empty"
+                }
+
+                html.append("  <tr class=\"$rowClass\">\n")
+                html.append("    <td class=\"anden-cell\">$i</td>\n")
+                html.append("    <td>$dateIn</td>\n")
+                html.append("    <td>$status</td>\n")
+                html.append("    <td>$eco</td>\n")
+                html.append("    <td>$tipoMat</td>\n")
+                html.append("    <td>$plates</td>\n")
+                html.append("    <td>$platesLoc</td>\n")
+                html.append("    <td>$comp</td>\n")
+                html.append("    <td>$operacion</td>\n")
+                html.append("    <td>$dest</td>\n")
+                html.append("    <td>$procDate</td>\n")
+                html.append("    <td>$doc</td>\n")
+                html.append("    <td>$seal</td>\n")
+                html.append("    <td colspan=\"2\">$comments</td>\n")
+                html.append("  </tr>\n")
+            } else {
+                html.append("  <tr class=\"color-empty\">\n")
+                html.append("    <td class=\"anden-cell\">$i</td>\n")
+                html.append("    <td>-</td>\n")
+                html.append("    <td>-</td>\n")
+                html.append("    <td>-</td>\n")
+                html.append("    <td>-</td>\n")
+                html.append("    <td>-</td>\n")
+                html.append("    <td>-</td>\n")
+                html.append("    <td>-</td>\n")
+                html.append("    <td>-</td>\n")
+                html.append("    <td>-</td>\n")
+                html.append("    <td>-</td>\n")
+                html.append("    <td>-</td>\n")
+                html.append("    <td>-</td>\n")
+                html.append("    <td colspan=\"2\">-</td>\n")
+                html.append("  </tr>\n")
+            }
+        }
+        html.append("</table>\n")
+
+        html.append("<br><br>\n")
+
+        // --- SECTION 2: YARDA DE MXDC( PATIO) ---
+        html.append("<table>\n")
+        html.append("  <tr>\n")
+        html.append("    <td colspan=\"15\" class=\"title-sec\">YARDA DE MXDC( PATIO)</td>\n")
+        html.append("  </tr>\n")
+        html.append("  <tr>\n")
+        html.append("    <th>#</th>\n")
+        html.append("    <th>Fecha</th>\n")
+        html.append("    <th>Disposicion</th>\n")
+        html.append("    <th>No. Economico</th>\n")
+        html.append("    <th>Tipo</th>\n")
+        html.append("    <th>Placas</th>\n")
+        html.append("    <th>Origen de Placas</th>\n")
+        html.append("    <th>Compañia</th>\n")
+        html.append("    <th>Operacion</th>\n")
+        html.append("    <th>DESTINO</th>\n")
+        html.append("    <th>Fecha de Procesado</th>\n")
+        html.append("    <th>Deliverys</th>\n")
+        html.append("    <th>Numero de Sello colocado</th>\n")
+        html.append("    <th colspan=\"2\">comentarios</th>\n")
+        html.append("  </tr>\n")
+
+        val patioContainers = containers.filter { it.locationType == "Patio" }
+        for (c in patioContainers) {
+            val dateIn = if (!c.receptionDate.isNullOrBlank()) escapeHtml(c.receptionDate) else formatTs(c.timestamp)
+            val status = c.status.uppercase()
+            val eco = escapeHtml(c.economicNumber)
+            val tipoMat = escapeHtml(c.materialType ?: "FG")
+            val plates = escapeHtml(c.plates)
+            val platesLoc = escapeHtml(c.platesLocation)
+            val comp = escapeHtml(c.company)
+
+            val operacion = if (comp.uppercase().contains("MEX-CAL")) {
+                c.mexCalType?.uppercase() ?: if (c.destination?.uppercase() == "EXPORTACION") "EXPORTACION" else "INTERPLANTA"
+            } else {
+                "EXPORTACION"
+            }
+
+            val dest = escapeHtml(c.destination ?: "")
+            
+            val procDate = if (c.loadStatus == "Falta por completar" || c.loadStatus == "Falta por procesar") {
+                ""
+            } else {
+                c.processedDate ?: ""
+            }
+
+            val doc = escapeHtml(c.deliveryDocument ?: "")
+            val seal = escapeHtml(c.sealCode ?: "")
+
+            val comments = when (c.loadStatus) {
+                "Falta por completar" -> "PENDIENTE POR COMPLETAR"
+                "Falta por procesar" -> "PENDIENTE POR PROCESAR"
+                "En espera de salida" -> "EN ESPERA DE SALIDA"
+                else -> "-"
+            }
+
+            val rowClass = when {
+                status.startsWith("VAC") -> {
+                    when {
+                        c.type == "Intermodal" -> "color-intermodal-vacio"
+                        c.type == "Contenedor Marítimo" -> "color-contenedor-vacio"
+                        comp.uppercase().contains("MEX-CAL") -> {
+                            if (dest.uppercase() == "MXDC") "color-mexcal-mxdc-vacio" else "color-mexcal-export-vacio"
+                        }
+                        else -> "color-empty"
+                    }
+                }
+                status.startsWith("CARG") -> {
+                    if (c.loadStatus == "En espera de salida") {
+                        if (c.isStorageOnly || comp.uppercase().contains("ALMACENAJE")) "color-almacenaje" else "color-exportacion"
+                    } else {
+                        "color-pendientes"
+                    }
+                }
+                else -> "color-empty"
+            }
+
+            html.append("  <tr class=\"$rowClass\">\n")
+            html.append("    <td class=\"bold\"></td>\n")
+            html.append("    <td>$dateIn</td>\n")
+            html.append("    <td>$status</td>\n")
+            html.append("    <td>$eco</td>\n")
+            html.append("    <td>$tipoMat</td>\n")
+            html.append("    <td>$plates</td>\n")
+            html.append("    <td>$platesLoc</td>\n")
+            html.append("    <td>$comp</td>\n")
+            html.append("    <td>$operacion</td>\n")
+            html.append("    <td>$dest</td>\n")
+            html.append("    <td>$procDate</td>\n")
+            html.append("    <td>$doc</td>\n")
+            html.append("    <td>$seal</td>\n")
+            html.append("    <td colspan=\"2\">$comments</td>\n")
+            html.append("  </tr>\n")
+        }
+        html.append("</table>\n")
+
+        html.append("<br><br>\n")
+
+        // --- SECTION 3: RESUMEN / TOTALES ---
+        html.append("<table style=\"width: 450px;\">\n")
+        html.append("  <tr>\n")
+        html.append("    <th style=\"width: 150px;\">Fecha de conteo</th>\n")
+        html.append("    <th style=\"width: 200px;\">Descripcion</th>\n")
+        html.append("    <th style=\"width: 100px;\">Cantidad</th>\n")
+        html.append("  </tr>\n")
+        html.append("  <tr>\n")
+        html.append("    <td rowspan=\"8\" class=\"bold\" style=\"font-size: 11pt; background-color: #FFFFFF;\">$formattedReportDate</td>\n")
+        html.append("    <td class=\"color-exportacion bold\">Exportacion</td>\n")
+        html.append("    <td class=\"bold\">$countExportacion</td>\n")
+        html.append("  </tr>\n")
+        html.append("  <tr>\n")
+        html.append("    <td class=\"color-almacenaje bold\">Almacenaje</td>\n")
+        html.append("    <td class=\"bold\">$countAlmacenaje</td>\n")
+        html.append("  </tr>\n")
+        html.append("  <tr>\n")
+        html.append("    <td class=\"color-fg-recibos bold\">FG Recibos</td>\n")
+        html.append("    <td class=\"bold\">$countFgRecibos</td>\n")
+        html.append("  </tr>\n")
+        html.append("  <tr>\n")
+        html.append("    <td class=\"color-intermodal-vacio bold\">Intermodal vacio</td>\n")
+        html.append("    <td class=\"bold\">$countIntermodalVacio</td>\n")
+        html.append("  </tr>\n")
+        html.append("  <tr>\n")
+        html.append("    <td class=\"color-mexcal-mxdc-vacio bold\">Mex - cal mxdc vacio</td>\n")
+        html.append("    <td class=\"bold\">$countMexCalMxdcVacio</td>\n")
+        html.append("  </tr>\n")
+        html.append("  <tr>\n")
+        html.append("    <td class=\"color-mexcal-export-vacio bold\">Mex - cal export vacio</td>\n")
+        html.append("    <td class=\"bold\">$countMexCalExportVacio</td>\n")
+        html.append("  </tr>\n")
+        html.append("  <tr>\n")
+        html.append("    <td class=\"color-contenedor-vacio bold\">Contenedor vacio</td>\n")
+        html.append("    <td class=\"bold\">$countContenedorVacio</td>\n")
+        html.append("  </tr>\n")
+        html.append("  <tr>\n")
+        html.append("    <td class=\"bold\" style=\"background-color: #FFFFFF;\">Pendientes</td>\n")
+        html.append("    <td class=\"bold\">$countPendientes</td>\n")
+        html.append("  </tr>\n")
+        html.append("</table>\n")
+
+        html.append("</body>\n")
+        html.append("</html>\n")
+
+        return html.toString()
     }
 
     suspend fun generateDockConditionsCsvString(reportId: String): String {
         val dockConditions = dao.getDockConditions(reportId)
-        val csv = StringBuilder()
-        csv.append("REPORTE DIARIO DE CONDICION DE ANDENES (1 AL 14)\n")
-        csv.append("Fecha:,$reportId\n")
-        csv.append("Generado:,,${SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date())}\n\n")
-        csv.append("Anden,Tipo Anden,Fuera de Servicio,Rampa,Seguro de Rampa,Gancho,Cortina,Shelter,Gomas,Topes Seguridad,Semaforo,Luces,Notas\n")
+        val html = StringBuilder()
+
+        fun escapeHtml(str: String): String {
+            return str.replace("&", "&amp;")
+                .replace("<", "&lt;")
+                .replace(">", "&gt;")
+                .replace("\"", "&quot;")
+                .replace("'", "&#39;")
+        }
+
+        html.append("<html>\n")
+        html.append("<head>\n")
+        html.append("<meta http-equiv=\"Content-Type\" content=\"text/html; charset=utf-8\">\n")
+        html.append("<!--[if gte mso 9]>\n")
+        html.append("<xml>\n")
+        html.append(" <x:ExcelWorkbook>\n")
+        html.append("  <x:ExcelWorksheets>\n")
+        html.append("   <x:ExcelWorksheet>\n")
+        html.append("    <x:Name>Condicion de Andenes</x:Name>\n")
+        html.append("    <x:WorksheetOptions>\n")
+        html.append("     <x:DisplayGridlines/>\n")
+        html.append("    </x:WorksheetOptions>\n")
+        html.append("   </x:ExcelWorksheet>\n")
+        html.append("  </x:ExcelWorksheets>\n")
+        html.append(" </x:ExcelWorkbook>\n")
+        html.append("</xml>\n")
+        html.append("<![endif]-->\n")
+        html.append("<style>\n")
+        html.append("  table { border-collapse: collapse; font-family: Calibri, sans-serif; font-size: 11pt; border: 1px solid #000000; }\n")
+        html.append("  th { border: 1px solid #000000; padding: 6px; font-weight: bold; text-align: center; background-color: #00B0F0; color: #FFFFFF; }\n")
+        html.append("  td { border: 1px solid #7F7F7F; padding: 5px; text-align: center; }\n")
+        html.append("  .title { font-size: 16pt; font-weight: bold; border: none; text-align: center; height: 40px; background-color: #FFFFFF; color: #000000; }\n")
+        html.append("  .status-bien { background-color: #C6E0B4; color: #375623; font-weight: bold; }\n")
+        html.append("  .status-mal { background-color: #F8CBAD; color: #C65911; font-weight: bold; }\n")
+        html.append("  .status-oos { background-color: #FFC000; color: #000000; font-weight: bold; }\n")
+        html.append("  .status-normal { background-color: #FFFFFF; color: #000000; }\n")
+        html.append("  .bold { font-weight: bold; }\n")
+        html.append("</style>\n")
+        html.append("</head>\n")
+        html.append("<body>\n")
+
+        html.append("<table>\n")
+        html.append("  <tr>\n")
+        html.append("    <td colspan=\"13\" class=\"title\">REPORTE DIARIO DE CONDICION DE ANDENES (1 AL 14)</td>\n")
+        html.append("  </tr>\n")
+        html.append("  <tr>\n")
+        html.append("    <td colspan=\"13\" style=\"border: none; text-align: left; font-weight: bold; padding: 5px;\">Fecha: $reportId &nbsp;&nbsp;&nbsp;&nbsp; Generado: ${SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date())}</td>\n")
+        html.append("  </tr>\n")
+        html.append("  <tr>\n")
+        html.append("    <th>Anden</th>\n")
+        html.append("    <th>Tipo Anden</th>\n")
+        html.append("    <th>Fuera de Servicio</th>\n")
+        html.append("    <th>Rampa</th>\n")
+        html.append("    <th>Seguro de Rampa</th>\n")
+        html.append("    <th>Gancho</th>\n")
+        html.append("    <th>Cortina</th>\n")
+        html.append("    <th>Shelter</th>\n")
+        html.append("    <th>Gomas</th>\n")
+        html.append("    <th>Topes Seguridad</th>\n")
+        html.append("    <th>Semaforo</th>\n")
+        html.append("    <th>Luces</th>\n")
+        html.append("    <th>Notas</th>\n")
+        html.append("  </tr>\n")
+
         for (d in dockConditions) {
             val typeStr = if (d.dockNumber in 1..9) "Exportacion (1-9)" else "Recibos/FG (10-14)"
-            val oos = if (d.isOutOfService) "SI" else "NO"
-            val rampa = if (d.isRampGood) "BIEN" else "MAL"
-            val seguro = if (d.isRampLockGood) "BIEN" else "MAL"
-            val gancho = if (d.isDockHookGood) "BIEN" else "MAL"
-            val cortina = if (d.isCurtainGood) "BIEN" else "MAL"
-            val shelter = if (d.isShelterGood) "BIEN" else "MAL"
-            val gomas = if (d.isRubbersGood) "BIEN" else "MAL"
-            val topes = if (d.isSafetyStoppersGood) "BIEN" else "MAL"
-            val semaforo = if (d.isTrafficLightsGood) "BIEN" else "MAL"
-            val luces = if (d.isLightsGood) "BIEN" else "MAL"
-            val notes = d.notes.replace(",", ";").replace("\n", " ")
+            
+            val oosClass = if (d.isOutOfService) "status-oos" else "status-normal"
+            val oosText = if (d.isOutOfService) "SI" else "NO"
+            
+            fun getStatusClass(isGood: Boolean) = if (isGood) "status-bien" else "status-mal"
+            fun getStatusText(isGood: Boolean) = if (isGood) "BIEN" else "MAL"
 
-            csv.append("${d.dockNumber},$typeStr,$oos,$rampa,$seguro,$gancho,$cortina,$shelter,$gomas,$topes,$semaforo,$luces,$notes\n")
+            val rampaClass = getStatusClass(d.isRampGood)
+            val rampaText = getStatusText(d.isRampGood)
+
+            val seguroClass = getStatusClass(d.isRampLockGood)
+            val seguroText = getStatusText(d.isRampLockGood)
+
+            val ganchoClass = getStatusClass(d.isDockHookGood)
+            val ganchoText = getStatusText(d.isDockHookGood)
+
+            val cortinaClass = getStatusClass(d.isCurtainGood)
+            val cortinaText = getStatusText(d.isCurtainGood)
+
+            val shelterClass = getStatusClass(d.isShelterGood)
+            val shelterText = getStatusText(d.isShelterGood)
+
+            val gomasClass = getStatusClass(d.isRubbersGood)
+            val gomasText = getStatusText(d.isRubbersGood)
+
+            val topesClass = getStatusClass(d.isSafetyStoppersGood)
+            val topesText = getStatusText(d.isSafetyStoppersGood)
+
+            val semaforoClass = getStatusClass(d.isTrafficLightsGood)
+            val semaforoText = getStatusText(d.isTrafficLightsGood)
+
+            val lucesClass = getStatusClass(d.isLightsGood)
+            val lucesText = getStatusText(d.isLightsGood)
+
+            val notes = escapeHtml(d.notes)
+
+            html.append("  <tr>\n")
+            html.append("    <td class=\"bold\">${d.dockNumber}</td>\n")
+            html.append("    <td>$typeStr</td>\n")
+            html.append("    <td class=\"$oosClass\">$oosText</td>\n")
+            html.append("    <td class=\"$rampaClass\">$rampaText</td>\n")
+            html.append("    <td class=\"$seguroClass\">$seguroText</td>\n")
+            html.append("    <td class=\"$ganchoClass\">$ganchoText</td>\n")
+            html.append("    <td class=\"$cortinaClass\">$cortinaText</td>\n")
+            html.append("    <td class=\"$shelterClass\">$shelterText</td>\n")
+            html.append("    <td class=\"$gomasClass\">$gomasText</td>\n")
+            html.append("    <td class=\"$topesClass\">$topesText</td>\n")
+            html.append("    <td class=\"$semaforoClass\">$semaforoText</td>\n")
+            html.append("    <td class=\"$lucesClass\">$lucesText</td>\n")
+            html.append("    <td style=\"text-align: left;\">$notes</td>\n")
+            html.append("  </tr>\n")
         }
-        return csv.toString()
+
+        html.append("</table>\n")
+        html.append("</body>\n")
+        html.append("</html>\n")
+
+        return html.toString()
     }
 
     suspend fun generateDamagedBoxesCsvString(reportId: String): String {
         val damagedBoxes = dao.getDamagedBoxes(reportId)
-        val csv = StringBuilder()
-        csv.append("REPORTE DIARIO DE CAJAS Y CONTENEDORES DAÑADOS\n")
-        csv.append("Fecha:,$reportId\n")
-        csv.append("Generado:,,${SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date())}\n\n")
-        csv.append("No. Economico,Tipo de Unidad,Descripcion del Danio,Fecha Reporte\n")
+        val html = StringBuilder()
+
+        fun escapeHtml(str: String): String {
+            return str.replace("&", "&amp;")
+                .replace("<", "&lt;")
+                .replace(">", "&gt;")
+                .replace("\"", "&quot;")
+                .replace("'", "&#39;")
+        }
+
+        html.append("<html>\n")
+        html.append("<head>\n")
+        html.append("<meta http-equiv=\"Content-Type\" content=\"text/html; charset=utf-8\">\n")
+        html.append("<!--[if gte mso 9]>\n")
+        html.append("<xml>\n")
+        html.append(" <x:ExcelWorkbook>\n")
+        html.append("  <x:ExcelWorksheets>\n")
+        html.append("   <x:ExcelWorksheet>\n")
+        html.append("    <x:Name>Cajas Danadas</x:Name>\n")
+        html.append("    <x:WorksheetOptions>\n")
+        html.append("     <x:DisplayGridlines/>\n")
+        html.append("    </x:WorksheetOptions>\n")
+        html.append("   </x:ExcelWorksheet>\n")
+        html.append("  </x:ExcelWorksheets>\n")
+        html.append(" </x:ExcelWorkbook>\n")
+        html.append("</xml>\n")
+        html.append("<![endif]-->\n")
+        html.append("<style>\n")
+        html.append("  table { border-collapse: collapse; font-family: Calibri, sans-serif; font-size: 11pt; border: 1px solid #000000; }\n")
+        html.append("  th { border: 1px solid #000000; padding: 6px; font-weight: bold; text-align: center; background-color: #ED7D31; color: #FFFFFF; }\n")
+        html.append("  td { border: 1px solid #7F7F7F; padding: 5px; text-align: center; }\n")
+        html.append("  .title { font-size: 16pt; font-weight: bold; border: none; text-align: center; height: 40px; background-color: #FFFFFF; color: #C00000; }\n")
+        html.append("  .bold { font-weight: bold; }\n")
+        html.append("</style>\n")
+        html.append("</head>\n")
+        html.append("<body>\n")
+
+        html.append("<table>\n")
+        html.append("  <tr>\n")
+        html.append("    <td colspan=\"4\" class=\"title\">REPORTE DIARIO DE CAJAS Y CONTENEDORES DAÑADOS</td>\n")
+        html.append("  </tr>\n")
+        html.append("  <tr>\n")
+        html.append("    <td colspan=\"4\" style=\"border: none; text-align: left; font-weight: bold; padding: 5px;\">Fecha: $reportId &nbsp;&nbsp;&nbsp;&nbsp; Generado: ${SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date())}</td>\n")
+        html.append("  </tr>\n")
+        html.append("  <tr>\n")
+        html.append("    <th>No. Economico</th>\n")
+        html.append("    <th>Tipo de Unidad</th>\n")
+        html.append("    <th>Descripcion del Daño</th>\n")
+        html.append("    <th>Fecha Reporte</th>\n")
+        html.append("  </tr>\n")
+
         for (b in damagedBoxes) {
-            val eco = b.economicNumber.replace(",", ";").replace("\n", " ")
-            val type = b.type
-            val desc = b.damageDescription.replace(",", ";").replace("\n", " ")
+            val eco = escapeHtml(b.economicNumber)
+            val type = escapeHtml(b.type)
+            val desc = escapeHtml(b.damageDescription)
             val dateStr = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()).format(Date(b.timestamp))
 
-            csv.append("$eco,$type,$desc,$dateStr\n")
+            html.append("  <tr>\n")
+            html.append("    <td class=\"bold\">$eco</td>\n")
+            html.append("    <td>$type</td>\n")
+            html.append("    <td style=\"text-align: left;\">$desc</td>\n")
+            html.append("    <td>$dateStr</td>\n")
+            html.append("  </tr>\n")
         }
-        return csv.toString()
+
+        html.append("</table>\n")
+        html.append("</body>\n")
+        html.append("</html>\n")
+
+        return html.toString()
     }
 
     suspend fun saveCsvToFileWithPrefix(context: Context, reportId: String, content: String, prefix: String): File {
         return withContext(Dispatchers.IO) {
-            val fileName = "${prefix}_${reportId}.csv"
+            val extension = if (prefix == "Inventario_Cajas" || prefix == "Condicion_Andenes" || prefix == "Reporte_Cajas_Danadas" || prefix == "Reporte_Completo") ".xls" else ".csv"
+            val fileName = "${prefix}_${reportId}$extension"
             val file = File(context.getExternalFilesDir(null), fileName)
             FileOutputStream(file).use { out ->
                 out.write(content.toByteArray(Charsets.UTF_8))
