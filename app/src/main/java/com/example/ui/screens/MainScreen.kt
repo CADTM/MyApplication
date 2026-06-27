@@ -661,12 +661,88 @@ fun SyncAndExportTabContent(
                     }
                     Spacer(modifier = Modifier.height(10.dp))
                     Text(
-                        text = "Genera un reporte local en formato de hoja de cálculo universal. Podrás compartirlo por WhatsApp, correo electrónico o guardarlo en tus archivos locales de forma inmediata.",
+                        text = "Genera reportes locales e independientes en formato de hoja de cálculo universal (CSV) para compartir de forma inmediata por WhatsApp, correo o guardar localmente.",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Spacer(modifier = Modifier.height(16.dp))
+
+                    // Button 1: Inventario de Cajas
                     Button(
+                        onClick = {
+                            coroutineScope.launch {
+                                try {
+                                    val file = viewModel.exportContainersCsvLocally(context)
+                                    shareFile(context, file)
+                                } catch (e: Exception) {
+                                    Toast.makeText(context, "Error al generar archivo: ${e.localizedMessage}", Toast.LENGTH_LONG).show()
+                                }
+                            }
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("export_containers_button"),
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+                    ) {
+                        Icon(Icons.Default.Share, contentDescription = null)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Exportar Inventario de Cajas")
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    // Button 2: Condición de Andenes
+                    Button(
+                        onClick = {
+                            coroutineScope.launch {
+                                try {
+                                    val file = viewModel.exportDockConditionsCsvLocally(context)
+                                    shareFile(context, file)
+                                } catch (e: Exception) {
+                                    Toast.makeText(context, "Error al generar archivo: ${e.localizedMessage}", Toast.LENGTH_LONG).show()
+                                }
+                            }
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("export_dock_conditions_button"),
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary)
+                    ) {
+                        Icon(Icons.Default.Share, contentDescription = null)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Exportar Condición de Andenes")
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    // Button 3: Cajas Dañadas
+                    Button(
+                        onClick = {
+                            coroutineScope.launch {
+                                try {
+                                    val file = viewModel.exportDamagedBoxesCsvLocally(context)
+                                    shareFile(context, file)
+                                } catch (e: Exception) {
+                                    Toast.makeText(context, "Error al generar archivo: ${e.localizedMessage}", Toast.LENGTH_LONG).show()
+                                }
+                            }
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("export_damaged_boxes_button"),
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.tertiary)
+                    ) {
+                        Icon(Icons.Default.Share, contentDescription = null)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Exportar Cajas Dañadas")
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Divider(color = MaterialTheme.colorScheme.outlineVariant)
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    // Button 4: Reporte General Combinado
+                    OutlinedButton(
                         onClick = {
                             coroutineScope.launch {
                                 try {
@@ -679,12 +755,11 @@ fun SyncAndExportTabContent(
                         },
                         modifier = Modifier
                             .fillMaxWidth()
-                            .testTag("export_local_button"),
-                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary)
+                            .testTag("export_local_button")
                     ) {
                         Icon(Icons.Default.Share, contentDescription = null)
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("Exportar y Compartir Reporte")
+                        Text("Exportar Reporte Completo")
                     }
                 }
             }
@@ -1009,14 +1084,18 @@ fun DockRowCard(
                             fontWeight = FontWeight.Bold,
                             fontSize = 13.sp
                         )
-                        if (unit.loadStatus == "En espera de salida") {
+                        val hasDetails = !unit.sealCode.isNullOrEmpty() || 
+                                         !unit.destination.isNullOrEmpty() || 
+                                         !unit.deliveryDocument.isNullOrEmpty() || 
+                                         !unit.processedDate.isNullOrEmpty()
+                        if (hasDetails) {
                             Column(
                                 modifier = Modifier
                                     .padding(top = 4.dp)
                                     .background(Color(0xFFFFEBEE), RoundedCornerShape(4.dp))
                                     .padding(6.dp)
                             ) {
-                                if (!unit.sealCode.isNullOrEmpty()) {
+                                if (unit.loadStatus == "En espera de salida" && !unit.sealCode.isNullOrEmpty()) {
                                     Row(verticalAlignment = Alignment.CenterVertically) {
                                         Icon(Icons.Default.QrCode, contentDescription = null, size20(), tint = Color(0xFFC62828))
                                         Spacer(modifier = Modifier.width(4.dp))
@@ -1029,7 +1108,9 @@ fun DockRowCard(
                                     }
                                 }
                                 if (!unit.destination.isNullOrEmpty()) {
-                                    Spacer(modifier = Modifier.height(2.dp))
+                                    if (unit.loadStatus == "En espera de salida" && !unit.sealCode.isNullOrEmpty()) {
+                                        Spacer(modifier = Modifier.height(2.dp))
+                                    }
                                     Text(
                                         text = "Destino: ${unit.destination}",
                                         fontSize = 12.sp,
@@ -1154,14 +1235,18 @@ fun ContainerItemCard(
                         fontSize = 13.sp,
                         color = MaterialTheme.colorScheme.primary
                     )
-                    if (container.loadStatus == "En espera de salida") {
+                    val hasDetails = !container.sealCode.isNullOrEmpty() || 
+                                     !container.destination.isNullOrEmpty() || 
+                                     !container.deliveryDocument.isNullOrEmpty() || 
+                                     !container.processedDate.isNullOrEmpty()
+                    if (hasDetails) {
                         Column(
                             modifier = Modifier
                                 .padding(top = 4.dp)
                                 .background(Color(0xFFFFEBEE), RoundedCornerShape(4.dp))
                                 .padding(6.dp)
                         ) {
-                            if (!container.sealCode.isNullOrEmpty()) {
+                            if (container.loadStatus == "En espera de salida" && !container.sealCode.isNullOrEmpty()) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Icon(Icons.Default.QrCode, contentDescription = null, size20(), tint = Color(0xFFC62828))
                                     Spacer(modifier = Modifier.width(4.dp))
@@ -1174,7 +1259,9 @@ fun ContainerItemCard(
                                 }
                             }
                             if (!container.destination.isNullOrEmpty()) {
-                                Spacer(modifier = Modifier.height(2.dp))
+                                if (container.loadStatus == "En espera de salida" && !container.sealCode.isNullOrEmpty()) {
+                                    Spacer(modifier = Modifier.height(2.dp))
+                                }
                                 Text(
                                     text = "Destino: ${container.destination}",
                                     fontSize = 12.sp,
@@ -1835,34 +1922,36 @@ fun AddContainerDialog(
                                 singleLine = true
                             )
                         }
+                    }
 
-                        // Destino, Delivery, Fecha de procesado
-                        item {
-                            OutlinedTextField(
-                                value = destination,
-                                onValueChange = { destination = it },
-                                label = { Text("Destino") },
-                                placeholder = { Text("Ej. Laredo, TX") },
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .testTag("destination_input"),
-                                singleLine = true
-                            )
-                        }
+                    // Destino, Delivery, Fecha de procesado (for all loaded statuses)
+                    item {
+                        OutlinedTextField(
+                            value = destination,
+                            onValueChange = { destination = it },
+                            label = { Text("Destino") },
+                            placeholder = { Text("Ej. Laredo, TX") },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("destination_input"),
+                            singleLine = true
+                        )
+                    }
 
-                        item {
-                            OutlinedTextField(
-                                value = deliveryDocument,
-                                onValueChange = { deliveryDocument = it },
-                                label = { Text("Delivery / Documento") },
-                                placeholder = { Text("Ej. D-982451") },
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .testTag("delivery_doc_input"),
-                                singleLine = true
-                            )
-                        }
+                    item {
+                        OutlinedTextField(
+                            value = deliveryDocument,
+                            onValueChange = { deliveryDocument = it },
+                            label = { Text("Delivery / Documento") },
+                            placeholder = { Text("Ej. D-982451") },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("delivery_doc_input"),
+                            singleLine = true
+                        )
+                    }
 
+                    if (loadStatus != "Falta por completar" && loadStatus != "Falta por procesar") {
                         item {
                             OutlinedTextField(
                                 value = processedDate,
@@ -1922,7 +2011,7 @@ fun AddContainerDialog(
                                     containerSize,
                                     destination,
                                     deliveryDocument,
-                                    processedDate
+                                    if (loadStatus == "Falta por completar" || loadStatus == "Falta por procesar") "" else processedDate
                                 )
                             },
                             enabled = economicNumber.isNotBlank(),

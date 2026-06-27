@@ -324,6 +324,24 @@ class ReportViewModel(private val repository: ReportRepository) : ViewModel() {
         return repository.saveCsvToFile(context, reportId, csvContent)
     }
 
+    suspend fun exportContainersCsvLocally(context: Context): File {
+        val reportId = _activeDate.value
+        val csvContent = repository.generateContainersCsvString(reportId)
+        return repository.saveCsvToFileWithPrefix(context, reportId, csvContent, "Inventario_Cajas")
+    }
+
+    suspend fun exportDockConditionsCsvLocally(context: Context): File {
+        val reportId = _activeDate.value
+        val csvContent = repository.generateDockConditionsCsvString(reportId)
+        return repository.saveCsvToFileWithPrefix(context, reportId, csvContent, "Condicion_Andenes")
+    }
+
+    suspend fun exportDamagedBoxesCsvLocally(context: Context): File {
+        val reportId = _activeDate.value
+        val csvContent = repository.generateDamagedBoxesCsvString(reportId)
+        return repository.saveCsvToFileWithPrefix(context, reportId, csvContent, "Reporte_Cajas_Danadas")
+    }
+
     private fun getTodayDateString(): String {
         val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
         return sdf.format(Date())
