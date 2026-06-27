@@ -1,0 +1,6 @@
+{
+  "name": "Control de Andenes",
+  "description": "Gestión de inventarios de cajas secas, contenedores intermodales y marítimos en andenes y patio, con reporte de daños, inspección de andenes y sincronización automática con Google Drive.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

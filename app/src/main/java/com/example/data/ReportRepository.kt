@@ -1,0 +1,147 @@
+package com.example.data
+
+import android.content.Context
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.withContext
+import java.io.File
+import java.io.FileOutputStream
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+
+class ReportRepository(private val dao: ReportDao) {
+
+    fun getAllReportsFlow(): Flow<List<DailyReport>> = dao.getAllDailyReportsFlow()
+
+    fun getAllContainersFlow(): Flow<List<ContainerItem>> = dao.getAllContainersFlow()
+
+    fun getContainersFlow(reportId: String): Flow<List<ContainerItem>> =
+        dao.getContainersForReportFlow(reportId)
+
+    fun getDamagedBoxesFlow(reportId: String): Flow<List<DamagedBox>> =
+        dao.getDamagedBoxesFlow(reportId)
+
+    fun getDockConditionsFlow(reportId: String): Flow<List<DockCondition>> =
+        dao.getDockConditionsFlow(reportId)
+
+    suspend fun getOrCreateReport(date: String): DailyReport {
+        val existing = dao.getDailyReport(date)
+        if (existing != null) return existing
+
+        val newReport = DailyReport(date = date)
+        dao.insertDailyReport(newReport)
+
+        // Pre-populate all 14 docks as GOOD condition to make data entry easy
+        for (i in 1..14) {
+            val cond = DockCondition(
+                id = "${date}_$i",
+                reportId = date,
+                dockNumber = i,
+                isRampGood = true,
+                isRampLockGood = true,
+                isDockHookGood = true,
+                isCurtainGood = true,
+                isShelterGood = true,
+                isRubbersGood = true,
+                isSafetyStoppersGood = true,
+                isTrafficLightsGood = true,
+                isLightsGood = true,
+                notes = ""
+            )
+            dao.insertDockCondition(cond)
+        }
+        return newReport
+    }
+
+    suspend fun updateReport(report: DailyReport) = dao.updateDailyReport(report)
+
+    suspend fun addContainerItem(item: ContainerItem) = dao.insertContainerItem(item)
+
+    suspend fun removeContainerItem(item: ContainerItem) = dao.deleteContainerItem(item)
+
+    suspend fun removeContainerItemById(id: Long) = dao.deleteContainerItemById(id)
+
+    suspend fun addDamagedBox(box: DamagedBox) = dao.insertDamagedBox(box)
+
+    suspend fun removeDamagedBoxById(id: Long) = dao.deleteDamagedBoxById(id)
+
+    suspend fun updateDockCondition(cond: DockCondition) = dao.insertDockCondition(cond)
+
+    suspend fun generateCsvString(reportId: String): String {
+        val containers = dao.getContainersForReport(reportId)
+        val dockConditions = dao.getDockConditions(reportId)
+        val damagedBoxes = dao.getDamagedBoxes(reportId)
+
+        val csv = StringBuilder()
+
+        // Section 1: Header
+        csv.append("REPORTE DIARIO DE CONTROL DE ANDENES E INVENTARIO\n")
+        csv.append("Fecha:,$reportId\n")
+        csv.append("Generado:,,${SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date())}\n\n")
+
+        // Section 2: Containers
+        csv.append("1. INVENTARIO DE CAJAS SECAS, INTERMODALES Y MARITIMOS (ANDENES Y PATIO)\n")
+        csv.append("Ubicacion,Anden,Categoria,Tipo,No. Economico,Placas,Lugar Placas,Estado,Progreso de Carga,Codigo Sello\n")
+        for (c in containers) {
+            val location = c.locationType
+            val dockNum = c.dockNumber?.toString() ?: ""
+            val category = c.dockCategory ?: ""
+            val type = c.type
+            val eco = c.economicNumber.replace(",", ";").replace("\n", " ")
+            val plates = c.plates.replace(",", ";").replace("\n", " ")
+            val platesLoc = c.platesLocation.replace(",", ";").replace("\n", " ")
+            val status = c.status
+            val loadStatus = c.loadStatus ?: ""
+            val seal = c.sealCode ?: ""
+
+            csv.append("$location,$dockNum,$category,$type,$eco,$plates,$platesLoc,$status,$loadStatus,$seal\n")
+        }
+        csv.append("\n")
+
+        // Section 3: Dock Conditions
+        csv.append("2. REPORTE DE CONDICION DE ANDENES (1 AL 14)\n")
+        csv.append("Anden,Tipo Anden,Rampa,Seguro de Rampa,Gancho,Cortina,Shelter,Gomas,Topes Seguridad,Semaforo,Luces,Notas\n")
+        for (d in dockConditions) {
+            val typeStr = if (d.dockNumber in 1..9) "Exportacion (1-9)" else "Recibos/FG (10-14)"
+            val rampa = if (d.isRampGood) "BIEN" else "MAL"
+            val seguro = if (d.isRampLockGood) "BIEN" else "MAL"
+            val gancho = if (d.isDockHookGood) "BIEN" else "MAL"
+            val cortina = if (d.isCurtainGood) "BIEN" else "MAL"
+            val shelter = if (d.isShelterGood) "BIEN" else "MAL"
+            val gomas = if (d.isRubbersGood) "BIEN" else "MAL"
+            val topes = if (d.isSafetyStoppersGood) "BIEN" else "MAL"
+            val semaforo = if (d.isTrafficLightsGood) "BIEN" else "MAL"
+            val luces = if (d.isLightsGood) "BIEN" else "MAL"
+            val notes = d.notes.replace(",", ";").replace("\n", " ")
+
+            csv.append("${d.dockNumber},$typeStr,$rampa,$seguro,$gancho,$cortina,$shelter,$gomas,$topes,$semaforo,$luces,$notes\n")
+        }
+        csv.append("\n")
+
+        // Section 4: Damaged Boxes
+        csv.append("3. REPORTE DE CAJAS Y CONTENEDORES DAÑADOS\n")
+        csv.append("No. Economico,Tipo de Unidad,Descripcion del Danio,Fecha Reporte\n")
+        for (b in damagedBoxes) {
+            val eco = b.economicNumber.replace(",", ";").replace("\n", " ")
+            val type = b.type
+            val desc = b.damageDescription.replace(",", ";").replace("\n", " ")
+            val dateStr = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()).format(Date(b.timestamp))
+
+            csv.append("$eco,$type,$desc,$dateStr\n")
+        }
+
+        return csv.toString()
+    }
+
+    suspend fun saveCsvToFile(context: Context, reportId: String, content: String): File {
+        return withContext(Dispatchers.IO) {
+            val fileName = "Reporte_Andenes_${reportId}.csv"
+            val file = File(context.getExternalFilesDir(null), fileName)
+            FileOutputStream(file).use { out ->
+                out.write(content.toByteArray(Charsets.UTF_8))
+            }
+            file
+        }
+    }
+}
