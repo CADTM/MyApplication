@@ -7,7 +7,9 @@ import androidx.room.PrimaryKey
 data class DailyReport(
     @PrimaryKey val date: String, // format "YYYY-MM-DD"
     val syncedToDrive: Boolean = false,
-    val driveFileId: String? = null
+    val driveFileId: String? = null,
+    val shift: String = "", // e.g., "1", "2", "3" or "Matutino" etc.
+    val supervisorName: String = "" // nombre de quien llena el reporte
 )
 
 @Entity(tableName = "container_items")
@@ -60,6 +62,9 @@ data class DockCondition(
     val isSafetyStoppersGood: Boolean = true,
     val isTrafficLightsGood: Boolean = true,
     val isLightsGood: Boolean = true,
+    val isEmpaquesGood: Boolean = true,
+    val isGatoHidraulicoGood: Boolean = true,
+    val isCadenaGood: Boolean = true,
     val notes: String = "",
     val isOutOfService: Boolean = false
 )

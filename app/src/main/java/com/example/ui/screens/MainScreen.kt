@@ -426,7 +426,7 @@ fun MainScreen(viewModel: ReportViewModel, modifier: Modifier = Modifier) {
             InspectDockDialog(
                 condition = condition,
                 onDismiss = { showDockInspectionDialog = null },
-                onConfirm = { ramp, rLock, hook, curtain, shelter, rubbers, stoppers, traffic, lights, notes, isOutOfService ->
+                onConfirm = { ramp, rLock, hook, curtain, shelter, rubbers, stoppers, traffic, lights, empaques, gato, cadena, notes, isOutOfService ->
                     viewModel.updateDockCondition(
                         dockNumber = condition.dockNumber,
                         isRampGood = ramp,
@@ -438,6 +438,9 @@ fun MainScreen(viewModel: ReportViewModel, modifier: Modifier = Modifier) {
                         isSafetyStoppersGood = stoppers,
                         isTrafficLightsGood = traffic,
                         isLightsGood = lights,
+                        isEmpaquesGood = empaques,
+                        isGatoHidraulicoGood = gato,
+                        isCadenaGood = cadena,
                         notes = notes,
                         isOutOfService = isOutOfService
                     )
@@ -638,12 +641,78 @@ fun SyncAndExportTabContent(
 ) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
+    val activeReport by viewModel.activeReport.collectAsState()
+    val shiftState = remember(activeReport) { mutableStateOf(activeReport?.shift ?: "") }
+    val supervisorState = remember(activeReport) { mutableStateOf(activeReport?.supervisorName ?: "") }
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
+        // Metadata Identification Section
+        item {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
+                shape = RoundedCornerShape(16.dp)
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            Icons.Default.Assignment,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(28.dp)
+                        )
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Text(
+                            text = "Datos de Identificación del Reporte",
+                            fontWeight = FontWeight.Bold,
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(12.dp))
+                    
+                    OutlinedTextField(
+                        value = shiftState.value,
+                        onValueChange = { shiftState.value = it },
+                        label = { Text("Turno") },
+                        placeholder = { Text("Ej: Matutino, Vespertino, Nocturno") },
+                        modifier = Modifier.fillMaxWidth().testTag("report_shift_input"),
+                        singleLine = true
+                    )
+                    
+                    Spacer(modifier = Modifier.height(10.dp))
+                    
+                    OutlinedTextField(
+                        value = supervisorState.value,
+                        onValueChange = { supervisorState.value = it },
+                        label = { Text("Nombre de quien llena el reporte") },
+                        placeholder = { Text("Ej: Supervisor Juan Pérez") },
+                        modifier = Modifier.fillMaxWidth().testTag("report_supervisor_input"),
+                        singleLine = true
+                    )
+                    
+                    Spacer(modifier = Modifier.height(14.dp))
+                    
+                    Button(
+                        onClick = {
+                            viewModel.updateActiveReportMetadata(shiftState.value, supervisorState.value)
+                            Toast.makeText(context, "Datos del reporte guardados correctamente", Toast.LENGTH_SHORT).show()
+                        },
+                        modifier = Modifier.fillMaxWidth().testTag("save_metadata_button"),
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+                    ) {
+                        Icon(Icons.Default.Save, contentDescription = null)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Guardar Datos del Reporte")
+                    }
+                }
+            }
+        }
+
         // Local Export Section
         item {
             Card(
@@ -2457,6 +2526,9 @@ fun InspectDockDialog(
         stoppers: Boolean,
         traffic: Boolean,
         lights: Boolean,
+        empaques: Boolean,
+        gatoHidraulico: Boolean,
+        cadena: Boolean,
         notes: String,
         isOutOfService: Boolean
     ) -> Unit
@@ -2470,6 +2542,9 @@ fun InspectDockDialog(
     var stoppers by remember { mutableStateOf(condition.isSafetyStoppersGood) }
     var traffic by remember { mutableStateOf(condition.isTrafficLightsGood) }
     var lights by remember { mutableStateOf(condition.isLightsGood) }
+    var empaques by remember { mutableStateOf(condition.isEmpaquesGood) }
+    var gatoHidraulico by remember { mutableStateOf(condition.isGatoHidraulicoGood) }
+    var cadena by remember { mutableStateOf(condition.isCadenaGood) }
     var notes by remember { mutableStateOf(condition.notes) }
     var isOutOfService by remember { mutableStateOf(condition.isOutOfService) }
 
@@ -2505,7 +2580,8 @@ fun InspectDockDialog(
                         onClick = {
                             ramp = true; rLock = true; hook = true; curtain = true
                             shelter = true; rubbers = true; stoppers = true
-                            traffic = true; lights = true
+                            traffic = true; lights = true; empaques = true
+                            gatoHidraulico = true; cadena = true
                         },
                         colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE8F5E9), contentColor = Color(0xFF2E7D32)),
                         modifier = Modifier.fillMaxWidth()
@@ -2555,7 +2631,7 @@ fun InspectDockDialog(
 
                 item { Divider() }
 
-                // The 9 Checklist items
+                // The 12 Checklist items
                 item { InspectionCheckItem(label = "Rampa niveladora", checked = ramp, onCheckedChange = { ramp = it }) }
                 item { InspectionCheckItem(label = "Seguro de rampa", checked = rLock, onCheckedChange = { rLock = it }) }
                 item { InspectionCheckItem(label = "Gancho de retención de andén", checked = hook, onCheckedChange = { hook = it }) }
@@ -2565,6 +2641,9 @@ fun InspectDockDialog(
                 item { InspectionCheckItem(label = "Topes de seguridad para llantas", checked = stoppers, onCheckedChange = { stoppers = it }) }
                 item { InspectionCheckItem(label = "Semáforo exterior de andén", checked = traffic, onCheckedChange = { traffic = it }) }
                 item { InspectionCheckItem(label = "Luces interiores de andén", checked = lights, onCheckedChange = { lights = it }) }
+                item { InspectionCheckItem(label = "Empaques", checked = empaques, onCheckedChange = { empaques = it }) }
+                item { InspectionCheckItem(label = "Gato hidráulico", checked = gatoHidraulico, onCheckedChange = { gatoHidraulico = it }) }
+                item { InspectionCheckItem(label = "Cadena", checked = cadena, onCheckedChange = { cadena = it }) }
 
                 item { Spacer(modifier = Modifier.height(4.dp)) }
 
@@ -2590,7 +2669,7 @@ fun InspectDockDialog(
                         Spacer(modifier = Modifier.width(8.dp))
                         Button(
                             onClick = {
-                                onConfirm(ramp, rLock, hook, curtain, shelter, rubbers, stoppers, traffic, lights, notes, isOutOfService)
+                                onConfirm(ramp, rLock, hook, curtain, shelter, rubbers, stoppers, traffic, lights, empaques, gatoHidraulico, cadena, notes, isOutOfService)
                             },
                             modifier = Modifier.testTag("confirm_dock_inspection_btn")
                         ) {

@@ -47,6 +47,9 @@ class ReportRepository(private val dao: ReportDao) {
                 isSafetyStoppersGood = true,
                 isTrafficLightsGood = true,
                 isLightsGood = true,
+                isEmpaquesGood = true,
+                isGatoHidraulicoGood = true,
+                isCadenaGood = true,
                 notes = ""
             )
             dao.insertDockCondition(cond)
@@ -72,6 +75,9 @@ class ReportRepository(private val dao: ReportDao) {
         val containers = dao.getContainersForReport(reportId)
         val dockConditions = dao.getDockConditions(reportId)
         val damagedBoxes = dao.getDamagedBoxes(reportId)
+        val report = dao.getDailyReport(reportId)
+        val shift = report?.shift ?: ""
+        val supervisorName = report?.supervisorName ?: ""
 
         val html = StringBuilder()
 
@@ -198,6 +204,9 @@ class ReportRepository(private val dao: ReportDao) {
         html.append("<table>\n")
         html.append("  <tr>\n")
         html.append("    <td colspan=\"15\" class=\"title-main\">REPORTE COMPLETO: INVENTARIO DE CAJAS 2026</td>\n")
+        html.append("  </tr>\n")
+        html.append("  <tr>\n")
+        html.append("    <td colspan=\"15\" style=\"border: none; text-align: left; font-weight: bold; padding: 5px;\">Fecha: $reportId &nbsp;&nbsp;&nbsp;&nbsp; Turno: $shift &nbsp;&nbsp;&nbsp;&nbsp; Elaboró: $supervisorName &nbsp;&nbsp;&nbsp;&nbsp; Generado: ${SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date())}</td>\n")
         html.append("  </tr>\n")
         html.append("  <tr>\n")
         html.append("    <th>Anden</th>\n")
@@ -463,12 +472,10 @@ class ReportRepository(private val dao: ReportDao) {
         // --- SECTION 4: CONDICION DE ANDENES ---
         html.append("<table>\n")
         html.append("  <tr>\n")
-        html.append("    <td colspan=\"13\" class=\"title-sec\">REPORTE DIARIO DE CONDICION DE ANDENES (1 AL 14)</td>\n")
+        html.append("    <td colspan=\"14\" class=\"title-sec\">REPORTE DIARIO DE CONDICION DE ANDENES (1 AL 14)</td>\n")
         html.append("  </tr>\n")
         html.append("  <tr>\n")
         html.append("    <th>Anden</th>\n")
-        html.append("    <th>Tipo Anden</th>\n")
-        html.append("    <th>Fuera de Servicio</th>\n")
         html.append("    <th>Rampa</th>\n")
         html.append("    <th>Seguro de Rampa</th>\n")
         html.append("    <th>Gancho</th>\n")
@@ -478,17 +485,15 @@ class ReportRepository(private val dao: ReportDao) {
         html.append("    <th>Topes Seguridad</th>\n")
         html.append("    <th>Semaforo</th>\n")
         html.append("    <th>Luces</th>\n")
+        html.append("    <th>Empaques</th>\n")
+        html.append("    <th>Gato Hidraulico</th>\n")
+        html.append("    <th>Cadena</th>\n")
         html.append("    <th>Notas</th>\n")
         html.append("  </tr>\n")
 
         for (d in dockConditions) {
-            val typeStr = if (d.dockNumber in 1..9) "Exportacion (1-9)" else "Recibos/FG (10-14)"
-            
-            val oosClass = if (d.isOutOfService) "status-oos" else "status-normal"
-            val oosText = if (d.isOutOfService) "SI" else "NO"
-            
             fun getStatusClass(isGood: Boolean) = if (isGood) "status-bien" else "status-mal"
-            fun getStatusText(isGood: Boolean) = if (isGood) "BIEN" else "MAL"
+            fun getStatusText(isGood: Boolean) = if (isGood) "✔" else "✘"
 
             val rampaClass = getStatusClass(d.isRampGood)
             val rampaText = getStatusText(d.isRampGood)
@@ -517,12 +522,19 @@ class ReportRepository(private val dao: ReportDao) {
             val lucesClass = getStatusClass(d.isLightsGood)
             val lucesText = getStatusText(d.isLightsGood)
 
+            val empaquesClass = getStatusClass(d.isEmpaquesGood)
+            val empaquesText = getStatusText(d.isEmpaquesGood)
+
+            val gatoClass = getStatusClass(d.isGatoHidraulicoGood)
+            val gatoText = getStatusText(d.isGatoHidraulicoGood)
+
+            val cadenaClass = getStatusClass(d.isCadenaGood)
+            val cadenaText = getStatusText(d.isCadenaGood)
+
             val notes = escapeHtml(d.notes)
 
             html.append("  <tr>\n")
             html.append("    <td class=\"bold\">${d.dockNumber}</td>\n")
-            html.append("    <td>$typeStr</td>\n")
-            html.append("    <td class=\"$oosClass\">$oosText</td>\n")
             html.append("    <td class=\"$rampaClass\">$rampaText</td>\n")
             html.append("    <td class=\"$seguroClass\">$seguroText</td>\n")
             html.append("    <td class=\"$ganchoClass\">$ganchoText</td>\n")
@@ -532,6 +544,9 @@ class ReportRepository(private val dao: ReportDao) {
             html.append("    <td class=\"$topesClass\">$topesText</td>\n")
             html.append("    <td class=\"$semaforoClass\">$semaforoText</td>\n")
             html.append("    <td class=\"$lucesClass\">$lucesText</td>\n")
+            html.append("    <td class=\"$empaquesClass\">$empaquesText</td>\n")
+            html.append("    <td class=\"$gatoClass\">$gatoText</td>\n")
+            html.append("    <td class=\"$cadenaClass\">$cadenaText</td>\n")
             html.append("    <td style=\"text-align: left;\">$notes</td>\n")
             html.append("  </tr>\n")
         }
@@ -585,6 +600,9 @@ class ReportRepository(private val dao: ReportDao) {
 
     suspend fun generateContainersCsvString(reportId: String): String {
         val containers = dao.getContainersForReport(reportId)
+        val report = dao.getDailyReport(reportId)
+        val shift = report?.shift ?: ""
+        val supervisorName = report?.supervisorName ?: ""
         val html = StringBuilder()
 
         val dateParser = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
@@ -700,6 +718,9 @@ class ReportRepository(private val dao: ReportDao) {
         html.append("<table>\n")
         html.append("  <tr>\n")
         html.append("    <td colspan=\"15\" class=\"title-main\">INVENTARIO DE CAJAS 2026</td>\n")
+        html.append("  </tr>\n")
+        html.append("  <tr>\n")
+        html.append("    <td colspan=\"15\" style=\"border: none; text-align: left; font-weight: bold; padding: 5px;\">Fecha: $reportId &nbsp;&nbsp;&nbsp;&nbsp; Turno: $shift &nbsp;&nbsp;&nbsp;&nbsp; Elaboró: $supervisorName &nbsp;&nbsp;&nbsp;&nbsp; Generado: ${SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date())}</td>\n")
         html.append("  </tr>\n")
         html.append("  <tr>\n")
         html.append("    <th>Anden</th>\n")
@@ -970,6 +991,9 @@ class ReportRepository(private val dao: ReportDao) {
 
     suspend fun generateDockConditionsCsvString(reportId: String): String {
         val dockConditions = dao.getDockConditions(reportId)
+        val report = dao.getDailyReport(reportId)
+        val shift = report?.shift ?: ""
+        val supervisorName = report?.supervisorName ?: ""
         val html = StringBuilder()
 
         fun escapeHtml(str: String): String {
@@ -1013,15 +1037,13 @@ class ReportRepository(private val dao: ReportDao) {
 
         html.append("<table>\n")
         html.append("  <tr>\n")
-        html.append("    <td colspan=\"13\" class=\"title\">REPORTE DIARIO DE CONDICION DE ANDENES (1 AL 14)</td>\n")
+        html.append("    <td colspan=\"14\" class=\"title\">REPORTE DIARIO DE CONDICION DE ANDENES (1 AL 14)</td>\n")
         html.append("  </tr>\n")
         html.append("  <tr>\n")
-        html.append("    <td colspan=\"13\" style=\"border: none; text-align: left; font-weight: bold; padding: 5px;\">Fecha: $reportId &nbsp;&nbsp;&nbsp;&nbsp; Generado: ${SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date())}</td>\n")
+        html.append("    <td colspan=\"14\" style=\"border: none; text-align: left; font-weight: bold; padding: 5px;\">Fecha: $reportId &nbsp;&nbsp;&nbsp;&nbsp; Turno: $shift &nbsp;&nbsp;&nbsp;&nbsp; Elaboró: $supervisorName &nbsp;&nbsp;&nbsp;&nbsp; Generado: ${SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date())}</td>\n")
         html.append("  </tr>\n")
         html.append("  <tr>\n")
         html.append("    <th>Anden</th>\n")
-        html.append("    <th>Tipo Anden</th>\n")
-        html.append("    <th>Fuera de Servicio</th>\n")
         html.append("    <th>Rampa</th>\n")
         html.append("    <th>Seguro de Rampa</th>\n")
         html.append("    <th>Gancho</th>\n")
@@ -1031,17 +1053,15 @@ class ReportRepository(private val dao: ReportDao) {
         html.append("    <th>Topes Seguridad</th>\n")
         html.append("    <th>Semaforo</th>\n")
         html.append("    <th>Luces</th>\n")
+        html.append("    <th>Empaques</th>\n")
+        html.append("    <th>Gato Hidraulico</th>\n")
+        html.append("    <th>Cadena</th>\n")
         html.append("    <th>Notas</th>\n")
         html.append("  </tr>\n")
 
         for (d in dockConditions) {
-            val typeStr = if (d.dockNumber in 1..9) "Exportacion (1-9)" else "Recibos/FG (10-14)"
-            
-            val oosClass = if (d.isOutOfService) "status-oos" else "status-normal"
-            val oosText = if (d.isOutOfService) "SI" else "NO"
-            
             fun getStatusClass(isGood: Boolean) = if (isGood) "status-bien" else "status-mal"
-            fun getStatusText(isGood: Boolean) = if (isGood) "BIEN" else "MAL"
+            fun getStatusText(isGood: Boolean) = if (isGood) "✔" else "✘"
 
             val rampaClass = getStatusClass(d.isRampGood)
             val rampaText = getStatusText(d.isRampGood)
@@ -1070,12 +1090,19 @@ class ReportRepository(private val dao: ReportDao) {
             val lucesClass = getStatusClass(d.isLightsGood)
             val lucesText = getStatusText(d.isLightsGood)
 
+            val empaquesClass = getStatusClass(d.isEmpaquesGood)
+            val empaquesText = getStatusText(d.isEmpaquesGood)
+
+            val gatoClass = getStatusClass(d.isGatoHidraulicoGood)
+            val gatoText = getStatusText(d.isGatoHidraulicoGood)
+
+            val cadenaClass = getStatusClass(d.isCadenaGood)
+            val cadenaText = getStatusText(d.isCadenaGood)
+
             val notes = escapeHtml(d.notes)
 
             html.append("  <tr>\n")
             html.append("    <td class=\"bold\">${d.dockNumber}</td>\n")
-            html.append("    <td>$typeStr</td>\n")
-            html.append("    <td class=\"$oosClass\">$oosText</td>\n")
             html.append("    <td class=\"$rampaClass\">$rampaText</td>\n")
             html.append("    <td class=\"$seguroClass\">$seguroText</td>\n")
             html.append("    <td class=\"$ganchoClass\">$ganchoText</td>\n")
@@ -1085,6 +1112,9 @@ class ReportRepository(private val dao: ReportDao) {
             html.append("    <td class=\"$topesClass\">$topesText</td>\n")
             html.append("    <td class=\"$semaforoClass\">$semaforoText</td>\n")
             html.append("    <td class=\"$lucesClass\">$lucesText</td>\n")
+            html.append("    <td class=\"$empaquesClass\">$empaquesText</td>\n")
+            html.append("    <td class=\"$gatoClass\">$gatoText</td>\n")
+            html.append("    <td class=\"$cadenaClass\">$cadenaText</td>\n")
             html.append("    <td style=\"text-align: left;\">$notes</td>\n")
             html.append("  </tr>\n")
         }
@@ -1098,6 +1128,9 @@ class ReportRepository(private val dao: ReportDao) {
 
     suspend fun generateDamagedBoxesCsvString(reportId: String): String {
         val damagedBoxes = dao.getDamagedBoxes(reportId)
+        val report = dao.getDailyReport(reportId)
+        val shift = report?.shift ?: ""
+        val supervisorName = report?.supervisorName ?: ""
         val html = StringBuilder()
 
         fun escapeHtml(str: String): String {
@@ -1140,7 +1173,7 @@ class ReportRepository(private val dao: ReportDao) {
         html.append("    <td colspan=\"4\" class=\"title\">REPORTE DIARIO DE CAJAS Y CONTENEDORES DAÑADOS</td>\n")
         html.append("  </tr>\n")
         html.append("  <tr>\n")
-        html.append("    <td colspan=\"4\" style=\"border: none; text-align: left; font-weight: bold; padding: 5px;\">Fecha: $reportId &nbsp;&nbsp;&nbsp;&nbsp; Generado: ${SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date())}</td>\n")
+        html.append("    <td colspan=\"4\" style=\"border: none; text-align: left; font-weight: bold; padding: 5px;\">Fecha: $reportId &nbsp;&nbsp;&nbsp;&nbsp; Turno: $shift &nbsp;&nbsp;&nbsp;&nbsp; Elaboró: $supervisorName &nbsp;&nbsp;&nbsp;&nbsp; Generado: ${SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date())}</td>\n")
         html.append("  </tr>\n")
         html.append("  <tr>\n")
         html.append("    <th>No. Economico</th>\n")

@@ -254,6 +254,15 @@ class ReportViewModel(private val repository: ReportRepository) : ViewModel() {
         }
     }
 
+    fun updateActiveReportMetadata(shift: String, supervisorName: String) {
+        viewModelScope.launch {
+            val date = _activeDate.value
+            val report = repository.getOrCreateReport(date)
+            val updated = report.copy(shift = shift, supervisorName = supervisorName)
+            repository.updateReport(updated)
+        }
+    }
+
     // Dock Conditions
     fun updateDockCondition(
         dockNumber: Int,
@@ -266,6 +275,9 @@ class ReportViewModel(private val repository: ReportRepository) : ViewModel() {
         isSafetyStoppersGood: Boolean,
         isTrafficLightsGood: Boolean,
         isLightsGood: Boolean,
+        isEmpaquesGood: Boolean,
+        isGatoHidraulicoGood: Boolean,
+        isCadenaGood: Boolean,
         notes: String,
         isOutOfService: Boolean = false
     ) {
@@ -284,6 +296,9 @@ class ReportViewModel(private val repository: ReportRepository) : ViewModel() {
                 isSafetyStoppersGood = isSafetyStoppersGood,
                 isTrafficLightsGood = isTrafficLightsGood,
                 isLightsGood = isLightsGood,
+                isEmpaquesGood = isEmpaquesGood,
+                isGatoHidraulicoGood = isGatoHidraulicoGood,
+                isCadenaGood = isCadenaGood,
                 notes = notes.trim(),
                 isOutOfService = isOutOfService
             )
