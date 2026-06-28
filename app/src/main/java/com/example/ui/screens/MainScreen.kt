@@ -98,6 +98,13 @@ fun MainScreen(viewModel: ReportViewModel, modifier: Modifier = Modifier) {
     var pendingMoveReceptionDate by remember { mutableStateOf<String?>(null) }
     var pendingMoveMaterialType by remember { mutableStateOf<String?>(null) }
 
+    // State variables for duplicate checking in Damaged Boxes
+    var showDamagedDuplicateDialog by remember { mutableStateOf(false) }
+    var pendingDamagedBox by remember { mutableStateOf<DamagedBox?>(null) }
+    var pendingDamagedEconomicNumber by remember { mutableStateOf("") }
+    var pendingDamagedType by remember { mutableStateOf("") }
+    var pendingDamagedDescription by remember { mutableStateOf("") }
+
     // Init check
     LaunchedEffect(Unit) {
         viewModel.checkUserSignedIn(context)
@@ -575,15 +582,103 @@ fun MainScreen(viewModel: ReportViewModel, modifier: Modifier = Modifier) {
                 },
                 onConfirm = { ecoNum, type, description ->
                     val currentEdit = editingDamagedBox
-                    if (currentEdit != null) {
-                        viewModel.editDamagedBox(currentEdit.id, ecoNum, type, description)
-                        Toast.makeText(context, "Reporte de daño modificado", Toast.LENGTH_SHORT).show()
-                    } else {
-                        viewModel.addDamagedBox(ecoNum, type, description)
-                        Toast.makeText(context, "Reporte de daño registrado", Toast.LENGTH_SHORT).show()
+                    val duplicateDamaged = damagedBoxes.find {
+                        it.economicNumber.trim().uppercase() == ecoNum.trim().uppercase() &&
+                        (currentEdit == null || it.id != currentEdit.id)
                     }
-                    showAddDamagedBoxDialog = false
-                    editingDamagedBox = null
+
+                    if (duplicateDamaged != null) {
+                        pendingDamagedBox = duplicateDamaged
+                        pendingDamagedEconomicNumber = ecoNum
+                        pendingDamagedType = type
+                        pendingDamagedDescription = description
+                        showDamagedDuplicateDialog = true
+                    } else {
+                        if (currentEdit != null) {
+                            viewModel.editDamagedBox(currentEdit.id, ecoNum, type, description)
+                            Toast.makeText(context, "Reporte de daño modificado", Toast.LENGTH_SHORT).show()
+                        } else {
+                            viewModel.addDamagedBox(ecoNum, type, description)
+                            Toast.makeText(context, "Reporte de daño registrado", Toast.LENGTH_SHORT).show()
+                        }
+                        showAddDamagedBoxDialog = false
+                        editingDamagedBox = null
+                    }
+                }
+            )
+        }
+
+        if (showDamagedDuplicateDialog && pendingDamagedBox != null) {
+            val duplicate = pendingDamagedBox!!
+            AlertDialog(
+                onDismissRequest = {
+                    showDamagedDuplicateDialog = false
+                    pendingDamagedBox = null
+                },
+                icon = {
+                    Icon(
+                        imageVector = Icons.Default.ReportProblem,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.size(36.dp)
+                    )
+                },
+                title = {
+                    Text(
+                        text = "Unidad ya reportada con daño",
+                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.titleLarge
+                    )
+                },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(
+                            text = "La unidad con el número económico \"${duplicate.economicNumber}\" ya está registrada en el inventario de cajas dañadas de hoy.",
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                        Text(
+                            text = "¿Deseas actualizar el reporte de daño existente con la nueva descripción y tipo?",
+                            fontWeight = FontWeight.SemiBold,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                },
+                confirmButton = {
+                    Button(
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.primary
+                        ),
+                        onClick = {
+                            coroutineScope.launch {
+                                viewModel.editDamagedBox(
+                                    id = duplicate.id,
+                                    economicNumber = pendingDamagedEconomicNumber,
+                                    type = pendingDamagedType,
+                                    description = pendingDamagedDescription
+                                )
+                                Toast.makeText(context, "Reporte de daño actualizado con éxito", Toast.LENGTH_SHORT).show()
+                                
+                                // Reset state
+                                showDamagedDuplicateDialog = false
+                                pendingDamagedBox = null
+                                showAddDamagedBoxDialog = false
+                                editingDamagedBox = null
+                            }
+                        }
+                    ) {
+                        Text("Sí, actualizar")
+                    }
+                },
+                dismissButton = {
+                    TextButton(
+                        onClick = {
+                            showDamagedDuplicateDialog = false
+                            pendingDamagedBox = null
+                        }
+                    ) {
+                        Text("No, cancelar")
+                    }
                 }
             )
         }
