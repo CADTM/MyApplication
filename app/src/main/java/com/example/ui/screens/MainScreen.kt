@@ -641,6 +641,7 @@ fun SyncAndExportTabContent(
 ) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
+    var selectedFormat by remember { mutableStateOf("excel") } // "excel" or "csv"
     val activeReport by viewModel.activeReport.collectAsState()
     val shiftState = remember(activeReport) { mutableStateOf(activeReport?.shift ?: "") }
     val supervisorState = remember(activeReport) { mutableStateOf(activeReport?.supervisorName ?: "") }
@@ -730,7 +731,7 @@ fun SyncAndExportTabContent(
                         )
                         Spacer(modifier = Modifier.width(12.dp))
                         Text(
-                            text = "Exportación a Formato Excel (CSV)",
+                            text = "Exportación de Reportes",
                             fontWeight = FontWeight.Bold,
                             style = MaterialTheme.typography.titleMedium,
                             color = MaterialTheme.colorScheme.onSecondaryContainer
@@ -738,10 +739,37 @@ fun SyncAndExportTabContent(
                     }
                     Spacer(modifier = Modifier.height(10.dp))
                     Text(
-                        text = "Genera reportes locales e independientes en formato de hoja de cálculo universal (CSV) para compartir de forma inmediata por WhatsApp, correo o guardar localmente.",
+                        text = "Genera reportes locales en formato Excel con diseño visual o en formato CSV de texto plano para compartir por WhatsApp, correo o abrir de forma nativa en Microsoft 365.",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    // Format selector
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        FilterChip(
+                            selected = selectedFormat == "excel",
+                            onClick = { selectedFormat = "excel" },
+                            label = { Text("Excel con Formato (.xls)") },
+                            leadingIcon = if (selectedFormat == "excel") {
+                                { Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp)) }
+                            } else null,
+                            modifier = Modifier.weight(1f)
+                        )
+                        FilterChip(
+                            selected = selectedFormat == "csv",
+                            onClick = { selectedFormat = "csv" },
+                            label = { Text("Texto Plano CSV (.csv)") },
+                            leadingIcon = if (selectedFormat == "csv") {
+                                { Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp)) }
+                            } else null,
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+
                     Spacer(modifier = Modifier.height(16.dp))
 
                     // Button 1: Inventario de Cajas
@@ -749,7 +777,7 @@ fun SyncAndExportTabContent(
                         onClick = {
                             coroutineScope.launch {
                                 try {
-                                    val file = viewModel.exportContainersCsvLocally(context)
+                                    val file = viewModel.exportContainersCsvLocally(context, selectedFormat)
                                     shareFile(context, file)
                                 } catch (e: Exception) {
                                     Toast.makeText(context, "Error al generar archivo: ${e.localizedMessage}", Toast.LENGTH_LONG).show()
@@ -773,7 +801,7 @@ fun SyncAndExportTabContent(
                         onClick = {
                             coroutineScope.launch {
                                 try {
-                                    val file = viewModel.exportDockConditionsCsvLocally(context)
+                                    val file = viewModel.exportDockConditionsCsvLocally(context, selectedFormat)
                                     shareFile(context, file)
                                 } catch (e: Exception) {
                                     Toast.makeText(context, "Error al generar archivo: ${e.localizedMessage}", Toast.LENGTH_LONG).show()
@@ -797,7 +825,7 @@ fun SyncAndExportTabContent(
                         onClick = {
                             coroutineScope.launch {
                                 try {
-                                    val file = viewModel.exportDamagedBoxesCsvLocally(context)
+                                    val file = viewModel.exportDamagedBoxesCsvLocally(context, selectedFormat)
                                     shareFile(context, file)
                                 } catch (e: Exception) {
                                     Toast.makeText(context, "Error al generar archivo: ${e.localizedMessage}", Toast.LENGTH_LONG).show()
@@ -823,7 +851,7 @@ fun SyncAndExportTabContent(
                         onClick = {
                             coroutineScope.launch {
                                 try {
-                                    val file = viewModel.exportCsvLocally(context)
+                                    val file = viewModel.exportCsvLocally(context, selectedFormat)
                                     shareFile(context, file)
                                 } catch (e: Exception) {
                                     Toast.makeText(context, "Error al generar archivo: ${e.localizedMessage}", Toast.LENGTH_LONG).show()
@@ -1835,9 +1863,9 @@ fun AddContainerDialog(
                         Text("Operación (MÉX-CAL)", fontWeight = FontWeight.Bold, fontSize = 14.sp)
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             FilterChip(
-                                selected = mexCalType == "Importación",
-                                onClick = { mexCalType = "Importación" },
-                                label = { Text("Importación") },
+                                selected = mexCalType == "Exportación",
+                                onClick = { mexCalType = "Exportación" },
+                                label = { Text("Exportación") },
                                 modifier = Modifier.weight(1f)
                             )
                             FilterChip(

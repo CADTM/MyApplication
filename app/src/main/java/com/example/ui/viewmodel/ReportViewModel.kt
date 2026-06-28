@@ -324,7 +324,7 @@ class ReportViewModel(private val repository: ReportRepository) : ViewModel() {
                     return@launch
                 }
 
-                val csvContent = repository.generateCsvString(reportId)
+                val csvContent = repository.generateCsvPlain(reportId)
                 val fileName = "Reporte_Andenes_y_Patio_${reportId}.csv"
 
                 val fileId = DriveUploader.uploadCsvToDrive(token, fileName, csvContent)
@@ -348,29 +348,49 @@ class ReportViewModel(private val repository: ReportRepository) : ViewModel() {
         _driveSyncState.value = DriveSyncState.Idle
     }
 
-    // Local CSV Export
-    suspend fun exportCsvLocally(context: Context): File {
+    // Local CSV/Excel Export
+    suspend fun exportCsvLocally(context: Context, format: String = "excel"): File {
         val reportId = _activeDate.value
-        val csvContent = repository.generateCsvString(reportId)
-        return repository.saveCsvToFile(context, reportId, csvContent)
+        return if (format == "csv") {
+            val content = repository.generateCsvPlain(reportId)
+            repository.saveContentToFile(context, reportId, content, "Reporte_Completo", ".csv")
+        } else {
+            val content = repository.generateCsvString(reportId)
+            repository.saveContentToFile(context, reportId, content, "Reporte_Completo", ".xls")
+        }
     }
 
-    suspend fun exportContainersCsvLocally(context: Context): File {
+    suspend fun exportContainersCsvLocally(context: Context, format: String = "excel"): File {
         val reportId = _activeDate.value
-        val csvContent = repository.generateContainersCsvString(reportId)
-        return repository.saveCsvToFileWithPrefix(context, reportId, csvContent, "Inventario_Cajas")
+        return if (format == "csv") {
+            val content = repository.generateContainersCsvPlain(reportId)
+            repository.saveContentToFile(context, reportId, content, "Inventario_Cajas", ".csv")
+        } else {
+            val content = repository.generateContainersCsvString(reportId)
+            repository.saveContentToFile(context, reportId, content, "Inventario_Cajas", ".xls")
+        }
     }
 
-    suspend fun exportDockConditionsCsvLocally(context: Context): File {
+    suspend fun exportDockConditionsCsvLocally(context: Context, format: String = "excel"): File {
         val reportId = _activeDate.value
-        val csvContent = repository.generateDockConditionsCsvString(reportId)
-        return repository.saveCsvToFileWithPrefix(context, reportId, csvContent, "Condicion_Andenes")
+        return if (format == "csv") {
+            val content = repository.generateDockConditionsCsvPlain(reportId)
+            repository.saveContentToFile(context, reportId, content, "Condicion_Andenes", ".csv")
+        } else {
+            val content = repository.generateDockConditionsCsvString(reportId)
+            repository.saveContentToFile(context, reportId, content, "Condicion_Andenes", ".xls")
+        }
     }
 
-    suspend fun exportDamagedBoxesCsvLocally(context: Context): File {
+    suspend fun exportDamagedBoxesCsvLocally(context: Context, format: String = "excel"): File {
         val reportId = _activeDate.value
-        val csvContent = repository.generateDamagedBoxesCsvString(reportId)
-        return repository.saveCsvToFileWithPrefix(context, reportId, csvContent, "Reporte_Cajas_Danadas")
+        return if (format == "csv") {
+            val content = repository.generateDamagedBoxesCsvPlain(reportId)
+            repository.saveContentToFile(context, reportId, content, "Reporte_Cajas_Danadas", ".csv")
+        } else {
+            val content = repository.generateDamagedBoxesCsvString(reportId)
+            repository.saveContentToFile(context, reportId, content, "Reporte_Cajas_Danadas", ".xls")
+        }
     }
 
     private fun getTodayDateString(): String {

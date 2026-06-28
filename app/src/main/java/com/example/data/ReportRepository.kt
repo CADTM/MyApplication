@@ -1214,4 +1214,275 @@ class ReportRepository(private val dao: ReportDao) {
             file
         }
     }
+
+    private fun escapeCsv(value: String): String {
+        val clean = value.replace("\"", "\"\"")
+        if (clean.contains(",") || clean.contains("\"") || clean.contains("\n") || clean.contains("\r")) {
+            return "\"$clean\""
+        }
+        return clean
+    }
+
+    suspend fun saveContentToFile(context: Context, reportId: String, content: String, prefix: String, extension: String): File {
+        return withContext(Dispatchers.IO) {
+            val fileName = "${prefix}_${reportId}$extension"
+            val file = File(context.getExternalFilesDir(null), fileName)
+            FileOutputStream(file).use { out ->
+                out.write(content.toByteArray(Charsets.UTF_8))
+            }
+            file
+        }
+    }
+
+    suspend fun generateContainersCsvPlain(reportId: String): String {
+        val containers = dao.getContainersForReport(reportId)
+        val report = dao.getDailyReport(reportId)
+        val shift = report?.shift ?: ""
+        val supervisorName = report?.supervisorName ?: ""
+        
+        val csv = java.lang.StringBuilder()
+        csv.append('\uFEFF')
+        
+        csv.append("INVENTARIO DE CAJAS 2026\n")
+        csv.append("Fecha:,${escapeCsv(reportId)},Turno:,${escapeCsv(shift)},Elaboró:,${escapeCsv(supervisorName)}\n")
+        csv.append("\n")
+        
+        csv.append("Anden,Fecha De Entrada,Disposicion,No. Economico,Tipo Material,Placas,Origen de Placas,Compañía,Operacion,Destino,Fecha de Procesado,Deliverys,Numero de Sello colocado,Comentarios\n")
+        
+        val andenesMap = containers.filter { it.locationType == "Andén" && it.dockNumber != null }
+            .associateBy { it.dockNumber!! }
+            
+        for (i in 1..14) {
+            val c = andenesMap[i]
+            if (c != null) {
+                val dateIn = if (!c.receptionDate.isNullOrBlank()) c.receptionDate else {
+                    val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+                    sdf.format(Date(c.timestamp))
+                }
+                val status = c.status
+                val eco = c.economicNumber
+                val tipoMat = c.materialType ?: "FG"
+                val plates = c.plates
+                val platesLoc = c.platesLocation
+                val comp = c.company
+                val operacion = if (comp.uppercase().contains("MEX-CAL")) {
+                    val rawType = c.mexCalType?.uppercase() ?: ""
+                    if (rawType.contains("IMPORT") || rawType.contains("EXPORT")) {
+                        "EXPORTACION"
+                    } else if (rawType.contains("INTER")) {
+                        "INTERPLANTA"
+                    } else {
+                        if (c.destination?.uppercase() == "EXPORTACION") "EXPORTACION" else "INTERPLANTA"
+                    }
+                } else {
+                    "EXPORTACION"
+                }
+                val dest = c.destination ?: ""
+                val procDate = if (c.loadStatus == "Falta por completar" || c.loadStatus == "Falta por procesar") "" else (c.processedDate ?: "")
+                val doc = c.deliveryDocument ?: ""
+                val seal = c.sealCode ?: ""
+                val comments = when (c.loadStatus) {
+                    "Falta por completar" -> "PENDIENTE POR COMPLETAR"
+                    "Falta por procesar" -> "PENDIENTE POR PROCESAR"
+                    "En espera de salida" -> "EN ESPERA DE SALIDA"
+                    else -> "-"
+                }
+                
+                csv.append("$i,${escapeCsv(dateIn)},${escapeCsv(status)},${escapeCsv(eco)},${escapeCsv(tipoMat)},${escapeCsv(plates)},${escapeCsv(platesLoc)},${escapeCsv(comp)},${escapeCsv(operacion)},${escapeCsv(dest)},${escapeCsv(procDate)},${escapeCsv(doc)},${escapeCsv(seal)},${escapeCsv(comments)}\n")
+            } else {
+                csv.append("$i,-,-,-,-,-,-,-,-,-,-,-,-,-\n")
+            }
+        }
+        
+        csv.append("\n\n")
+        csv.append("YARDA DE MXDC (PATIO)\n")
+        csv.append("#,Fecha,Disposicion,No. Economico,Tipo,Placas,Origen de Placas,Compañia,Operacion,DESTINO,Fecha de Procesado,Deliverys,Numero de Sello colocado,comentarios\n")
+        
+        val patioContainers = containers.filter { it.locationType == "Patio" }
+        var index = 1
+        for (c in patioContainers) {
+            val dateIn = if (!c.receptionDate.isNullOrBlank()) c.receptionDate else {
+                val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+                sdf.format(Date(c.timestamp))
+            }
+            val status = c.status
+            val eco = c.economicNumber
+            val tipoMat = c.materialType ?: "FG"
+            val plates = c.plates
+            val platesLoc = c.platesLocation
+            val comp = c.company
+            val operacion = if (comp.uppercase().contains("MEX-CAL")) {
+                val rawType = c.mexCalType?.uppercase() ?: ""
+                if (rawType.contains("IMPORT") || rawType.contains("EXPORT")) {
+                    "EXPORTACION"
+                } else if (rawType.contains("INTER")) {
+                    "INTERPLANTA"
+                } else {
+                    if (c.destination?.uppercase() == "EXPORTACION") "EXPORTACION" else "INTERPLANTA"
+                }
+            } else {
+                "EXPORTACION"
+            }
+            val dest = c.destination ?: ""
+            val procDate = if (c.loadStatus == "Falta por completar" || c.loadStatus == "Falta por procesar") "" else (c.processedDate ?: "")
+            val doc = c.deliveryDocument ?: ""
+            val seal = c.sealCode ?: ""
+            val comments = when (c.loadStatus) {
+                "Falta por completar" -> "PENDIENTE POR COMPLETAR"
+                "Falta por procesar" -> "PENDIENTE POR PROCESAR"
+                "En espera de salida" -> "EN ESPERA DE SALIDA"
+                else -> "-"
+            }
+            
+            csv.append("${index++},${escapeCsv(dateIn)},${escapeCsv(status)},${escapeCsv(eco)},${escapeCsv(tipoMat)},${escapeCsv(plates)},${escapeCsv(platesLoc)},${escapeCsv(comp)},${escapeCsv(operacion)},${escapeCsv(dest)},${escapeCsv(procDate)},${escapeCsv(doc)},${escapeCsv(seal)},${escapeCsv(comments)}\n")
+        }
+        
+        csv.append("\n\n")
+        csv.append("RESUMEN / TOTALES\n")
+        csv.append("Fecha de conteo,Descripcion,Cantidad\n")
+        
+        val countExportacion = containers.count {
+            it.status.uppercase().startsWith("CARG") &&
+            it.loadStatus == "En espera de salida" &&
+            !it.company.uppercase().contains("MEX-CAL") &&
+            !it.company.uppercase().contains("ALMACENAJE") &&
+            !it.isStorageOnly
+        }
+        val countAlmacenaje = containers.count {
+            it.isStorageOnly || (it.status.uppercase().startsWith("CARG") &&
+            it.loadStatus == "En espera de salida" &&
+            it.company.uppercase().contains("ALMACENAJE"))
+        }
+        val countFgRecibos = containers.count {
+            it.status.uppercase().startsWith("CARG") &&
+            it.loadStatus == "En espera de salida" &&
+            it.locationType == "Andén" &&
+            (it.dockNumber ?: 0) in 10..14
+        }
+        val countIntermodalVacio = containers.count {
+            it.type == "Intermodal" &&
+            it.status.uppercase().startsWith("VAC")
+        }
+        val countMexCalMxdcVacio = containers.count {
+            it.company.uppercase().contains("MEX-CAL") &&
+            it.status.uppercase().startsWith("VAC") &&
+            it.destination?.uppercase() == "MXDC"
+        }
+        val countMexCalExportVacio = containers.count {
+            it.company.uppercase().contains("MEX-CAL") &&
+            it.status.uppercase().startsWith("VAC") &&
+            it.destination?.uppercase() != "MXDC" &&
+            it.destination?.uppercase() != "PERRIS"
+        }
+        val countContenedorVacio = containers.count {
+            it.type == "Contenedor Marítimo" &&
+            it.status.uppercase().startsWith("VAC")
+        }
+        val countPendientes = containers.count {
+            it.status.uppercase().startsWith("CARG") &&
+            (it.loadStatus == "Falta por completar" || it.loadStatus == "Falta por procesar")
+        }
+        
+        csv.append("${escapeCsv(reportId)},Exportacion,$countExportacion\n")
+        csv.append(",Almacenaje,$countAlmacenaje\n")
+        csv.append(",FG Recibos,$countFgRecibos\n")
+        csv.append(",Intermodal vacio,$countIntermodalVacio\n")
+        csv.append(",Mex - cal mxdc vacio,$countMexCalMxdcVacio\n")
+        csv.append(",Mex - cal export vacio,$countMexCalExportVacio\n")
+        csv.append(",Contenedor vacio,$countContenedorVacio\n")
+        csv.append(",Pendientes,$countPendientes\n")
+        
+        return csv.toString()
+    }
+
+    suspend fun generateDockConditionsCsvPlain(reportId: String): String {
+        val dockConditions = dao.getDockConditions(reportId)
+        val report = dao.getDailyReport(reportId)
+        val shift = report?.shift ?: ""
+        val supervisorName = report?.supervisorName ?: ""
+        
+        val csv = java.lang.StringBuilder()
+        csv.append('\uFEFF')
+        
+        csv.append("REPORTE DIARIO DE CONDICION DE ANDENES (1 AL 14)\n")
+        csv.append("Fecha:,${escapeCsv(reportId)},Turno:,${escapeCsv(shift)},Elaboró:,${escapeCsv(supervisorName)}\n")
+        csv.append("\n")
+        
+        csv.append("Anden,Rampa,Seguro de Rampa,Gancho,Cortina,Shelter,Gomas,Topes Seguridad,Semaforo,Luces,Empaques,Gato Hidraulico,Cadena,Notas\n")
+        
+        for (d in dockConditions) {
+            fun getStatusText(isGood: Boolean) = if (isGood) "✔" else "✘"
+            
+            val rampa = getStatusText(d.isRampGood)
+            val seguro = getStatusText(d.isRampLockGood)
+            val gancho = getStatusText(d.isDockHookGood)
+            val cortina = getStatusText(d.isCurtainGood)
+            val shelter = getStatusText(d.isShelterGood)
+            val gomas = getStatusText(d.isRubbersGood)
+            val topes = getStatusText(d.isSafetyStoppersGood)
+            val semaforo = getStatusText(d.isTrafficLightsGood)
+            val luces = getStatusText(d.isLightsGood)
+            val empaques = getStatusText(d.isEmpaquesGood)
+            val gato = getStatusText(d.isGatoHidraulicoGood)
+            val cadena = getStatusText(d.isCadenaGood)
+            val notes = d.notes
+            
+            csv.append("${d.dockNumber},$rampa,$seguro,$gancho,$cortina,$shelter,$gomas,$topes,$semaforo,$luces,$empaques,$gato,$cadena,${escapeCsv(notes)}\n")
+        }
+        
+        return csv.toString()
+    }
+
+    suspend fun generateDamagedBoxesCsvPlain(reportId: String): String {
+        val damagedBoxes = dao.getDamagedBoxes(reportId)
+        val report = dao.getDailyReport(reportId)
+        val shift = report?.shift ?: ""
+        val supervisorName = report?.supervisorName ?: ""
+        
+        val csv = java.lang.StringBuilder()
+        csv.append('\uFEFF')
+        
+        csv.append("REPORTE DIARIO DE CAJAS Y CONTENEDORES DAÑADOS\n")
+        csv.append("Fecha:,${escapeCsv(reportId)},Turno:,${escapeCsv(shift)},Elaboró:,${escapeCsv(supervisorName)}\n")
+        csv.append("\n")
+        
+        csv.append("No. Economico,Tipo de Unidad,Descripcion del Daño,Fecha Reporte\n")
+        
+        for (b in damagedBoxes) {
+            val eco = b.economicNumber
+            val type = b.type
+            val desc = b.damageDescription
+            val dateStr = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()).format(Date(b.timestamp))
+            
+            csv.append("${escapeCsv(eco)},${escapeCsv(type)},${escapeCsv(desc)},${escapeCsv(dateStr)}\n")
+        }
+        
+        return csv.toString()
+    }
+
+    suspend fun generateCsvPlain(reportId: String): String {
+        val csv = java.lang.StringBuilder()
+        csv.append('\uFEFF')
+        
+        csv.append("REPORTE COMPLETO DIARIO DE OPERACIONES\n")
+        csv.append("=========================================\n\n")
+        
+        val containersPart = generateContainersCsvPlain(reportId)
+        val cleanContainers = if (containersPart.startsWith('\uFEFF')) containersPart.substring(1) else containersPart
+        csv.append(cleanContainers)
+        
+        csv.append("\n\n=========================================\n\n")
+        
+        val docksPart = generateDockConditionsCsvPlain(reportId)
+        val cleanDocks = if (docksPart.startsWith('\uFEFF')) docksPart.substring(1) else docksPart
+        csv.append(cleanDocks)
+        
+        csv.append("\n\n=========================================\n\n")
+        
+        val damagedPart = generateDamagedBoxesCsvPlain(reportId)
+        val cleanDamaged = if (damagedPart.startsWith('\uFEFF')) damagedPart.substring(1) else damagedPart
+        csv.append(cleanDamaged)
+        
+        return csv.toString()
+    }
 }
