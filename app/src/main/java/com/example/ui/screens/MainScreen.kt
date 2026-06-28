@@ -77,6 +77,27 @@ fun MainScreen(viewModel: ReportViewModel, modifier: Modifier = Modifier) {
     var editingDamagedBox by remember { mutableStateOf<DamagedBox?>(null) }
     var showDockInspectionDialog by remember { mutableStateOf<DockCondition?>(null) }
 
+    // State variables for moving/transferring a unit already registered in another location
+    var showMoveConfirmationDialog by remember { mutableStateOf(false) }
+    var pendingMoveContainer by remember { mutableStateOf<ContainerItem?>(null) }
+    var pendingMoveType by remember { mutableStateOf("") }
+    var pendingMoveLocationType by remember { mutableStateOf("") }
+    var pendingMoveDockNumber by remember { mutableStateOf<Int?>(null) }
+    var pendingMoveEconomicNumber by remember { mutableStateOf("") }
+    var pendingMovePlates by remember { mutableStateOf("") }
+    var pendingMovePlatesLocation by remember { mutableStateOf("") }
+    var pendingMoveStatus by remember { mutableStateOf("") }
+    var pendingMoveLoadStatus by remember { mutableStateOf<String?>(null) }
+    var pendingMoveSealCode by remember { mutableStateOf<String?>(null) }
+    var pendingMoveContainerSize by remember { mutableStateOf<String?>(null) }
+    var pendingMoveDestination by remember { mutableStateOf<String?>(null) }
+    var pendingMoveDeliveryDocument by remember { mutableStateOf<String?>(null) }
+    var pendingMoveProcessedDate by remember { mutableStateOf<String?>(null) }
+    var pendingMoveIsStorageOnly by remember { mutableStateOf(false) }
+    var pendingMoveMexCalType by remember { mutableStateOf<String?>(null) }
+    var pendingMoveReceptionDate by remember { mutableStateOf<String?>(null) }
+    var pendingMoveMaterialType by remember { mutableStateOf<String?>(null) }
+
     // Init check
     LaunchedEffect(Unit) {
         viewModel.checkUserSignedIn(context)
@@ -349,52 +370,197 @@ fun MainScreen(viewModel: ReportViewModel, modifier: Modifier = Modifier) {
                 },
                 onConfirm = { type, locType, dockNum, ecoNum, plates, platesLoc, status, loadStatus, seal, size, dest, deliv, procDate, isStorage, mexCal, recepDate, matType ->
                     val currentEdit = editingContainer
-                    if (currentEdit != null) {
-                        viewModel.editContainer(
-                            id = currentEdit.id,
-                            type = type,
-                            locationType = locType,
-                            dockNumber = dockNum,
-                            economicNumber = ecoNum,
-                            plates = plates,
-                            platesLocation = platesLoc,
-                            status = status,
-                            loadStatus = loadStatus,
-                            sealCode = seal,
-                            containerSize = size,
-                            destination = dest,
-                            deliveryDocument = deliv,
-                            processedDate = procDate,
-                            isStorageOnly = isStorage,
-                            mexCalType = mexCal,
-                            receptionDate = recepDate,
-                            materialType = matType
-                        )
-                        Toast.makeText(context, "Unidad modificada con éxito", Toast.LENGTH_SHORT).show()
-                    } else {
-                        viewModel.addContainer(
-                            type = type,
-                            locationType = locType,
-                            dockNumber = dockNum,
-                            economicNumber = ecoNum,
-                            plates = plates,
-                            platesLocation = platesLoc,
-                            status = status,
-                            loadStatus = loadStatus,
-                            sealCode = seal,
-                            containerSize = size,
-                            destination = dest,
-                            deliveryDocument = deliv,
-                            processedDate = procDate,
-                            isStorageOnly = isStorage,
-                            mexCalType = mexCal,
-                            receptionDate = recepDate,
-                            materialType = matType
-                        )
-                        Toast.makeText(context, "Unidad registrada con éxito", Toast.LENGTH_SHORT).show()
+                    val duplicateUnit = containers.find {
+                        it.economicNumber.trim().uppercase() == ecoNum.trim().uppercase() &&
+                        it.locationType.uppercase() != locType.uppercase() &&
+                        (currentEdit == null || it.id != currentEdit.id)
                     }
-                    showAddContainerDialog = false
-                    editingContainer = null
+
+                    if (duplicateUnit != null) {
+                        pendingMoveContainer = duplicateUnit
+                        pendingMoveType = type
+                        pendingMoveLocationType = locType
+                        pendingMoveDockNumber = dockNum
+                        pendingMoveEconomicNumber = ecoNum
+                        pendingMovePlates = plates
+                        pendingMovePlatesLocation = platesLoc
+                        pendingMoveStatus = status
+                        pendingMoveLoadStatus = loadStatus
+                        pendingMoveSealCode = seal
+                        pendingMoveContainerSize = size
+                        pendingMoveDestination = dest
+                        pendingMoveDeliveryDocument = deliv
+                        pendingMoveProcessedDate = procDate
+                        pendingMoveIsStorageOnly = isStorage
+                        pendingMoveMexCalType = mexCal
+                        pendingMoveReceptionDate = recepDate
+                        pendingMoveMaterialType = matType
+                        showMoveConfirmationDialog = true
+                    } else {
+                        if (currentEdit != null) {
+                            viewModel.editContainer(
+                                id = currentEdit.id,
+                                type = type,
+                                locationType = locType,
+                                dockNumber = dockNum,
+                                economicNumber = ecoNum,
+                                plates = plates,
+                                platesLocation = platesLoc,
+                                status = status,
+                                loadStatus = loadStatus,
+                                sealCode = seal,
+                                containerSize = size,
+                                destination = dest,
+                                deliveryDocument = deliv,
+                                processedDate = procDate,
+                                isStorageOnly = isStorage,
+                                mexCalType = mexCal,
+                                receptionDate = recepDate,
+                                materialType = matType
+                            )
+                            Toast.makeText(context, "Unidad modificada con éxito", Toast.LENGTH_SHORT).show()
+                        } else {
+                            viewModel.addContainer(
+                                type = type,
+                                locationType = locType,
+                                dockNumber = dockNum,
+                                economicNumber = ecoNum,
+                                plates = plates,
+                                platesLocation = platesLoc,
+                                status = status,
+                                loadStatus = loadStatus,
+                                sealCode = seal,
+                                containerSize = size,
+                                destination = dest,
+                                deliveryDocument = deliv,
+                                processedDate = procDate,
+                                isStorageOnly = isStorage,
+                                mexCalType = mexCal,
+                                receptionDate = recepDate,
+                                materialType = matType
+                            )
+                            Toast.makeText(context, "Unidad registrada con éxito", Toast.LENGTH_SHORT).show()
+                        }
+                        showAddContainerDialog = false
+                        editingContainer = null
+                    }
+                }
+            )
+        }
+
+        if (showMoveConfirmationDialog && pendingMoveContainer != null) {
+            val duplicate = pendingMoveContainer!!
+            AlertDialog(
+                onDismissRequest = {
+                    showMoveConfirmationDialog = false
+                    pendingMoveContainer = null
+                },
+                icon = {
+                    Icon(
+                        imageVector = Icons.Default.ReportProblem,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.size(36.dp)
+                    )
+                },
+                title = {
+                    Text(
+                        text = "Unidad ya registrada",
+                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.titleLarge
+                    )
+                },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(
+                            text = "La unidad con el número económico \"${duplicate.economicNumber}\" ya está registrada en ${duplicate.locationType.uppercase()}.",
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                        Text(
+                            text = "¿Deseas mover/transferir esta unidad a ${pendingMoveLocationType.uppercase()}? Esto la removerá de ${duplicate.locationType.uppercase()}.",
+                            fontWeight = FontWeight.SemiBold,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                },
+                confirmButton = {
+                    Button(
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.primary
+                        ),
+                        onClick = {
+                            coroutineScope.launch {
+                                // Delete the duplicate (old location)
+                                viewModel.deleteContainerById(duplicate.id)
+                                
+                                // Insert/Update the new one
+                                val currentEdit = editingContainer
+                                if (currentEdit != null) {
+                                    viewModel.editContainer(
+                                        id = currentEdit.id,
+                                        type = pendingMoveType,
+                                        locationType = pendingMoveLocationType,
+                                        dockNumber = pendingMoveDockNumber,
+                                        economicNumber = pendingMoveEconomicNumber,
+                                        plates = pendingMovePlates,
+                                        platesLocation = pendingMovePlatesLocation,
+                                        status = pendingMoveStatus,
+                                        loadStatus = pendingMoveLoadStatus,
+                                        sealCode = pendingMoveSealCode,
+                                        containerSize = pendingMoveContainerSize,
+                                        destination = pendingMoveDestination,
+                                        deliveryDocument = pendingMoveDeliveryDocument,
+                                        processedDate = pendingMoveProcessedDate,
+                                        isStorageOnly = pendingMoveIsStorageOnly,
+                                        mexCalType = pendingMoveMexCalType,
+                                        receptionDate = pendingMoveReceptionDate,
+                                        materialType = pendingMoveMaterialType
+                                    )
+                                    Toast.makeText(context, "Unidad movida y modificada con éxito", Toast.LENGTH_SHORT).show()
+                                } else {
+                                    viewModel.addContainer(
+                                        type = pendingMoveType,
+                                        locationType = pendingMoveLocationType,
+                                        dockNumber = pendingMoveDockNumber,
+                                        economicNumber = pendingMoveEconomicNumber,
+                                        plates = pendingMovePlates,
+                                        platesLocation = pendingMovePlatesLocation,
+                                        status = pendingMoveStatus,
+                                        loadStatus = pendingMoveLoadStatus,
+                                        sealCode = pendingMoveSealCode,
+                                        containerSize = pendingMoveContainerSize,
+                                        destination = pendingMoveDestination,
+                                        deliveryDocument = pendingMoveDeliveryDocument,
+                                        processedDate = pendingMoveProcessedDate,
+                                        isStorageOnly = pendingMoveIsStorageOnly,
+                                        mexCalType = pendingMoveMexCalType,
+                                        receptionDate = pendingMoveReceptionDate,
+                                        materialType = pendingMoveMaterialType
+                                    )
+                                    Toast.makeText(context, "Unidad movida y registrada con éxito", Toast.LENGTH_SHORT).show()
+                                }
+                                
+                                // Reset state
+                                showMoveConfirmationDialog = false
+                                pendingMoveContainer = null
+                                showAddContainerDialog = false
+                                editingContainer = null
+                            }
+                        }
+                    ) {
+                        Text("Sí, mover")
+                    }
+                },
+                dismissButton = {
+                    TextButton(
+                        onClick = {
+                            showMoveConfirmationDialog = false
+                            pendingMoveContainer = null
+                        }
+                    ) {
+                        Text("No, cancelar")
+                    }
                 }
             )
         }
