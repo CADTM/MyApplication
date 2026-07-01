@@ -1,5 +1,8 @@
+@file:Suppress("DEPRECATION")
+
 package com.example.ui.screens
 
+import androidx.compose.foundation.BorderStroke
 import android.app.DatePickerDialog
 import android.content.Context
 import android.content.Intent
@@ -22,6 +25,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.*
+import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -58,15 +62,15 @@ fun MainScreen(viewModel: ReportViewModel, modifier: Modifier = Modifier) {
     val coroutineScope = rememberCoroutineScope()
 
     val activeDate by viewModel.activeDate.collectAsState()
-    val activeReport by viewModel.activeReport.collectAsState()
     val containers by viewModel.activeContainers.collectAsState()
     val allContainersHistory by viewModel.allContainersHistory.collectAsState()
     val damagedBoxes by viewModel.activeDamagedBoxes.collectAsState()
     val dockConditions by viewModel.activeDockConditions.collectAsState()
     val googleAccount by viewModel.googleAccount.collectAsState()
     val driveSyncState by viewModel.driveSyncState.collectAsState()
+    val showLoadInventoryDialog by viewModel.showLoadInventoryDialog.collectAsState()
 
-    var activeTab by remember { mutableStateOf(0) } // 0: Andenes, 1: Patio, 2: Inspección, 3: Dañadas, 4: Sincronizar
+    var activeTab by remember { mutableIntStateOf(0) } // 0: Andenes, 1: Patio, 2: Resumen, 3: Inspección, 4: Dañadas, 5: Sincronizar
 
     var showAddContainerDialog by remember { mutableStateOf(false) }
     var editingContainer by remember { mutableStateOf<ContainerItem?>(null) }
@@ -76,6 +80,9 @@ fun MainScreen(viewModel: ReportViewModel, modifier: Modifier = Modifier) {
     var showAddDamagedBoxDialog by remember { mutableStateOf(false) }
     var editingDamagedBox by remember { mutableStateOf<DamagedBox?>(null) }
     var showDockInspectionDialog by remember { mutableStateOf<DockCondition?>(null) }
+
+    // State for filtering by summary card
+    var selectedSummaryFilter by remember { mutableStateOf<String?>(null) }
 
     // State variables for moving/transferring a unit already registered in another location
     var showMoveConfirmationDialog by remember { mutableStateOf(false) }
@@ -147,40 +154,49 @@ fun MainScreen(viewModel: ReportViewModel, modifier: Modifier = Modifier) {
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = {
-                    Column {
-                        Text(
-                            text = "Control de Andenes y Cajas",
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 20.sp
-                        )
-                        Text(
-                            text = "Logística de Inventario y Seguridad",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                },
-                actions = {
-                    IconButton(
-                        onClick = { datePickerDialog.show() },
-                        modifier = Modifier.testTag("date_picker_button")
-                    ) {
-                        Icon(Icons.Default.CalendarToday, contentDescription = "Seleccionar fecha")
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceColorAtElevation(3.dp)
+            Surface(shadowElevation = 4.dp) {
+                TopAppBar(
+                    title = {
+                        Column {
+                            Text(
+                                text = "Control de Andenes",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 18.sp,
+                                color = MaterialTheme.colorScheme.onPrimary
+                            )
+                            Text(
+                                text = "Logística e Inventario",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.8f)
+                            )
+                        }
+                    },
+                    actions = {
+                        IconButton(
+                            onClick = { datePickerDialog.show() },
+                            modifier = Modifier.testTag("date_picker_button")
+                        ) {
+                            Icon(
+                                Icons.Default.CalendarToday,
+                                contentDescription = "Seleccionar fecha",
+                                tint = MaterialTheme.colorScheme.onPrimary
+                            )
+                        }
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.primary,
+                        titleContentColor = MaterialTheme.colorScheme.onPrimary,
+                        actionIconContentColor = MaterialTheme.colorScheme.onPrimary
+                    )
                 )
-            )
+            }
         },
         floatingActionButton = {
-            if (activeTab == 0 || activeTab == 1) {
+            if (activeTab == 0 || activeTab == 1 || activeTab == 2) {
                 FloatingActionButton(
                     onClick = {
-                        presetLocationType = if (activeTab == 0) "Andén" else "Patio"
-                        presetDockNumber = if (activeTab == 0) 1 else null
+                        presetLocationType = "" // Start without location to avoid overwriting
+                        presetDockNumber = null
                         showAddContainerDialog = true
                     },
                     modifier = Modifier.testTag("add_item_fab"),
@@ -189,7 +205,7 @@ fun MainScreen(viewModel: ReportViewModel, modifier: Modifier = Modifier) {
                 ) {
                     Icon(Icons.Default.Add, contentDescription = "Registrar unidad")
                 }
-            } else if (activeTab == 3) {
+            } else if (activeTab == 4) {
                 FloatingActionButton(
                     onClick = { showAddDamagedBoxDialog = true },
                     modifier = Modifier.testTag("add_damaged_fab"),
@@ -231,7 +247,7 @@ fun MainScreen(viewModel: ReportViewModel, modifier: Modifier = Modifier) {
                         .padding(horizontal = 16.dp)
                 ) {
                     Text(
-                        text = "REPORTE LOGÍSTICO",
+                        text = "INVENTARIO DE CAJAS Y CONTENEDORES",
                         color = Color.White,
                         fontWeight = FontWeight.Bold,
                         fontSize = 14.sp,
@@ -267,38 +283,65 @@ fun MainScreen(viewModel: ReportViewModel, modifier: Modifier = Modifier) {
             // Tabs bar
             ScrollableTabRow(
                 selectedTabIndex = activeTab,
+                containerColor = MaterialTheme.colorScheme.primary,
+                contentColor = MaterialTheme.colorScheme.onPrimary,
                 edgePadding = 16.dp,
-                containerColor = MaterialTheme.colorScheme.surfaceColorAtElevation(1.dp)
+                divider = {},
+                indicator = { tabPositions ->
+                    TabRowDefaults.Indicator(
+                        Modifier.tabIndicatorOffset(tabPositions[activeTab]),
+                        color = MaterialTheme.colorScheme.onPrimary,
+                        height = 3.dp
+                    )
+                }
             ) {
                 Tab(
                     selected = activeTab == 0,
                     onClick = { activeTab = 0 },
-                    text = { Text("Andenes (1-14)", maxLines = 1) },
-                    icon = { Icon(Icons.Default.List, contentDescription = null) }
+                    text = { Text("Andenes", maxLines = 1) },
+                    icon = { Icon(Icons.Default.List, contentDescription = null) },
+                    selectedContentColor = MaterialTheme.colorScheme.onPrimary,
+                    unselectedContentColor = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.7f)
                 )
                 Tab(
                     selected = activeTab == 1,
                     onClick = { activeTab = 1 },
-                    text = { Text("En Patio", maxLines = 1) },
-                    icon = { Icon(Icons.Default.LocalShipping, contentDescription = null) }
+                    text = { Text("Patio", maxLines = 1) },
+                    icon = { Icon(Icons.Default.LocalShipping, contentDescription = null) },
+                    selectedContentColor = MaterialTheme.colorScheme.onPrimary,
+                    unselectedContentColor = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.7f)
                 )
                 Tab(
                     selected = activeTab == 2,
                     onClick = { activeTab = 2 },
-                    text = { Text("Estatus Andenes", maxLines = 1) },
-                    icon = { Icon(Icons.Default.FactCheck, contentDescription = null) }
+                    text = { Text("Resumen", maxLines = 1) },
+                    icon = { Icon(Icons.Default.PieChart, contentDescription = null) },
+                    selectedContentColor = MaterialTheme.colorScheme.onPrimary,
+                    unselectedContentColor = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.7f)
                 )
                 Tab(
                     selected = activeTab == 3,
                     onClick = { activeTab = 3 },
-                    text = { Text("Cajas Dañadas", maxLines = 1) },
-                    icon = { Icon(Icons.Default.BrokenImage, contentDescription = null) }
+                    text = { Text("Inspección", maxLines = 1) },
+                    icon = { Icon(Icons.Default.AssignmentTurnedIn, contentDescription = null) },
+                    selectedContentColor = MaterialTheme.colorScheme.onPrimary,
+                    unselectedContentColor = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.7f)
                 )
                 Tab(
                     selected = activeTab == 4,
                     onClick = { activeTab = 4 },
-                    text = { Text("Exportar / Drive", maxLines = 1) },
-                    icon = { Icon(Icons.Default.CloudSync, contentDescription = null) }
+                    text = { Text("Rechazadas", maxLines = 1) },
+                    icon = { Icon(Icons.Default.CancelPresentation, contentDescription = null) },
+                    selectedContentColor = MaterialTheme.colorScheme.onPrimary,
+                    unselectedContentColor = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.7f)
+                )
+                Tab(
+                    selected = activeTab == 5,
+                    onClick = { activeTab = 5 },
+                    text = { Text("Exportar", maxLines = 1) },
+                    icon = { Icon(Icons.Default.CloudSync, contentDescription = null) },
+                    selectedContentColor = MaterialTheme.colorScheme.onPrimary,
+                    unselectedContentColor = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.7f)
                 )
             }
 
@@ -327,7 +370,7 @@ fun MainScreen(viewModel: ReportViewModel, modifier: Modifier = Modifier) {
                         onDeleteContainer = { viewModel.deleteContainer(it) }
                     )
                     1 -> YardTabContent(
-                        containers = containers.filter { it.locationType == "Patio" },
+                        containers = containers,
                         onEditContainer = { item ->
                             editingContainer = item
                             presetLocationType = item.locationType
@@ -336,11 +379,25 @@ fun MainScreen(viewModel: ReportViewModel, modifier: Modifier = Modifier) {
                         },
                         onDeleteContainer = { viewModel.deleteContainer(it) }
                     )
-                    2 -> DockConditionsTabContent(
+                    2 -> SummaryTabContent(
+                        containers = containers,
+                        selectedFilter = selectedSummaryFilter,
+                        onFilterSelected = { 
+                            selectedSummaryFilter = if (selectedSummaryFilter == it) null else it 
+                        },
+                        onEditContainer = { item ->
+                            editingContainer = item
+                            presetLocationType = item.locationType
+                            presetDockNumber = item.dockNumber
+                            showAddContainerDialog = true
+                        },
+                        onDeleteContainer = { viewModel.deleteContainer(it) }
+                    )
+                    3 -> DockConditionsTabContent(
                         conditions = dockConditions,
                         onInspectDock = { showDockInspectionDialog = it }
                     )
-                    3 -> DamagedBoxesTabContent(
+                    4 -> DamagedBoxesTabContent(
                         damagedBoxes = damagedBoxes,
                         onEditDamaged = { box ->
                             editingDamagedBox = box
@@ -348,7 +405,7 @@ fun MainScreen(viewModel: ReportViewModel, modifier: Modifier = Modifier) {
                         },
                         onDeleteDamaged = { viewModel.deleteDamagedBoxById(it) }
                     )
-                    4 -> SyncAndExportTabContent(
+                    5 -> SyncAndExportTabContent(
                         viewModel = viewModel,
                         googleAccount = googleAccount,
                         driveSyncState = driveSyncState,
@@ -378,8 +435,8 @@ fun MainScreen(viewModel: ReportViewModel, modifier: Modifier = Modifier) {
                 onConfirm = { type, locType, dockNum, ecoNum, plates, platesLoc, status, loadStatus, seal, size, dest, deliv, procDate, isStorage, mexCal, recepDate, matType ->
                     val currentEdit = editingContainer
                     val duplicateUnit = containers.find {
-                        it.economicNumber.trim().uppercase() == ecoNum.trim().uppercase() &&
-                        it.locationType.uppercase() != locType.uppercase() &&
+                        it.economicNumber.trim().equals(ecoNum.trim(), ignoreCase = true) &&
+                        (it.locationType != locType || it.dockNumber != dockNum) &&
                         (currentEdit == null || it.id != currentEdit.id)
                     }
 
@@ -583,7 +640,7 @@ fun MainScreen(viewModel: ReportViewModel, modifier: Modifier = Modifier) {
                 onConfirm = { ecoNum, type, description ->
                     val currentEdit = editingDamagedBox
                     val duplicateDamaged = damagedBoxes.find {
-                        it.economicNumber.trim().uppercase() == ecoNum.trim().uppercase() &&
+                        it.economicNumber.trim().equals(ecoNum.trim(), ignoreCase = true) &&
                         (currentEdit == null || it.id != currentEdit.id)
                     }
 
@@ -683,6 +740,34 @@ fun MainScreen(viewModel: ReportViewModel, modifier: Modifier = Modifier) {
             )
         }
 
+        if (showLoadInventoryDialog) {
+            AlertDialog(
+                onDismissRequest = { viewModel.dismissLoadInventoryDialog() },
+                title = {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.CloudDownload, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Cargar Inventario")
+                    }
+                },
+                text = {
+                    Text("Se ha detectado que el inventario del día de hoy está vacío.\n\n¿Deseas cargar el inventario base (Snapshot del 7 de Julio) para comenzar a trabajar?")
+                },
+                confirmButton = {
+                    Button(onClick = {
+                        viewModel.loadInitialInventory()
+                    }) {
+                        Text("Sí, cargar")
+                    }
+                },
+                dismissButton = {
+                    OutlinedButton(onClick = { viewModel.dismissLoadInventoryDialog() }) {
+                        Text("No, dejar vacío")
+                    }
+                }
+            )
+        }
+
         showDockInspectionDialog?.let { condition ->
             InspectDockDialog(
                 condition = condition,
@@ -723,7 +808,8 @@ fun DocksTabContent(
     dockConditions: List<DockCondition>,
     onAddContainer: (Int) -> Unit,
     onEditContainer: (ContainerItem) -> Unit,
-    onDeleteContainer: (ContainerItem) -> Unit
+    onDeleteContainer: (ContainerItem) -> Unit,
+    modifier: Modifier = Modifier
 ) {
     val dockContainersMap = remember(containers) {
         containers.filter { it.locationType == "Andén" }.associateBy { it.dockNumber ?: 0 }
@@ -734,8 +820,8 @@ fun DocksTabContent(
     }
 
     LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(16.dp),
+        modifier = modifier.fillMaxSize(),
+        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 80.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         // Group 1: Exportación (Andenes 1 al 9)
@@ -749,7 +835,6 @@ fun DocksTabContent(
             DockRowCard(
                 dockNumber = dockNum,
                 unit = unit,
-                category = "Exportación",
                 onAdd = { onAddContainer(dockNum) },
                 onEdit = { unit?.let { onEditContainer(it) } },
                 onDelete = { unit?.let { onDeleteContainer(it) } },
@@ -769,7 +854,6 @@ fun DocksTabContent(
             DockRowCard(
                 dockNumber = dockNum,
                 unit = unit,
-                category = "Recibo/FG",
                 onAdd = { onAddContainer(dockNum) },
                 onEdit = { unit?.let { onEditContainer(it) } },
                 onDelete = { unit?.let { onDeleteContainer(it) } },
@@ -780,12 +864,122 @@ fun DocksTabContent(
 }
 
 @Composable
+fun SummaryTabContent(
+    containers: List<ContainerItem>,
+    selectedFilter: String?,
+    onFilterSelected: (String) -> Unit,
+    onEditContainer: (ContainerItem) -> Unit,
+    onDeleteContainer: (ContainerItem) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val filteredContainers = remember(containers, selectedFilter) {
+        if (selectedFilter == null) emptyList()
+        else containers.filter { it.matchesFilter(selectedFilter) }
+    }
+
+    LazyColumn(
+        modifier = modifier.fillMaxSize(),
+        contentPadding = PaddingValues(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        item {
+            InventorySummaryCards(
+                allContainers = containers,
+                selectedFilter = selectedFilter,
+                onFilterSelected = onFilterSelected
+            )
+        }
+
+        if (selectedFilter != null) {
+            item {
+                Spacer(modifier = Modifier.height(16.dp))
+                Divider()
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = "Detalle de: $selectedFilter",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
+
+            if (filteredContainers.isEmpty()) {
+                item {
+                    Text(
+                        "No hay unidades que coincidan con este criterio.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.padding(vertical = 16.dp),
+                        color = Color.Gray
+                    )
+                }
+            } else {
+                items(filteredContainers) { container ->
+                    ContainerItemCard(
+                        container = container,
+                        onEdit = { onEditContainer(container) },
+                        onDelete = { onDeleteContainer(container) }
+                    )
+                }
+            }
+        } else {
+            item {
+                Spacer(modifier = Modifier.height(32.dp))
+                Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Icon(
+                            Icons.Default.TouchApp,
+                            contentDescription = null,
+                            modifier = Modifier.size(48.dp),
+                            tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            "Toca una tarjeta para ver el detalle",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = Color.Gray
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
 fun YardTabContent(
     containers: List<ContainerItem>,
     onEditContainer: (ContainerItem) -> Unit,
-    onDeleteContainer: (ContainerItem) -> Unit
+    onDeleteContainer: (ContainerItem) -> Unit,
+    modifier: Modifier = Modifier
 ) {
-    if (containers.isEmpty()) {
+    val patioContainers = remember(containers) {
+        containers.filter { it.locationType == "Patio" }
+            .sortedWith(compareBy {
+                // Ordering as requested:
+                // 1. En espera de salida (Intermodales, luego Cajas, Mex-cal, Marítimos)
+                // 2. Intermodales vacíos
+                // 3. Mex-cal vacías
+                // 4. Contenedores vacíos
+                // 5. Almacenaje
+                when {
+                    it.loadStatus == "En espera de salida" -> {
+                        when (it.type) {
+                            "Intermodal" -> 10
+                            "Caja Seca" -> if (it.company.contains("MEX-CAL", ignoreCase = true)) 12 else 11
+                            "Contenedor Marítimo" -> 13
+                            else -> 14
+                        }
+                    }
+                    it.type == "Intermodal" && it.status.startsWith("Vac", ignoreCase = true) -> 20
+                    it.company.contains("MEX-CAL", ignoreCase = true) && it.status.startsWith("Vac", ignoreCase = true) -> 30
+                    it.type == "Contenedor Marítimo" && it.status.startsWith("Vac", ignoreCase = true) -> 40
+                    it.loadStatus == "Almacenaje" || it.isStorageOnly -> 50
+                    else -> 100
+                }
+            })
+    }
+
+    if (patioContainers.isEmpty()) {
         EmptyStateView(
             title = "Sin unidades en Patio",
             subtitle = "Registra cajas secas o contenedores para llevar el conteo del patio.",
@@ -793,19 +987,21 @@ fun YardTabContent(
         )
     } else {
         LazyColumn(
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(16.dp),
+            modifier = modifier.fillMaxSize(),
+            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 80.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             item {
+                Spacer(modifier = Modifier.height(8.dp))
                 Text(
-                    text = "Total en patio: ${containers.size} unidades",
+                    text = "Detalle de unidades en patio:",
                     fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary,
-                    style = MaterialTheme.typography.titleMedium
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.titleSmall
                 )
             }
-            items(containers) { container ->
+            
+            items(patioContainers) { container ->
                 ContainerItemCard(
                     container = container,
                     onEdit = { onEditContainer(container) },
@@ -816,19 +1012,311 @@ fun YardTabContent(
     }
 }
 
+private fun ContainerItem.matchesFilter(filter: String): Boolean {
+    return when (filter) {
+        "LISTOS PARA EXPORTACIÓN" -> {
+            status.startsWith("Carg", ignoreCase = true) &&
+            loadStatus == "En espera de salida" &&
+            !isStorageOnly &&
+            !company.contains("ALMACENAJE", ignoreCase = true) &&
+            (!company.contains("MEX-CAL", ignoreCase = true) || !destination.isNullOrBlank())
+        }
+        "Mex-cal export" -> {
+            company.equals("MEX-CAL", ignoreCase = true) && 
+            status.startsWith("Vac", ignoreCase = true) &&
+            (economicNumber.startsWith("2130") || economicNumber.startsWith("2131") || economicNumber.startsWith("2132") || mexCalType == "Exportación")
+        }
+        "Mex-cal mxdc" -> {
+            company.equals("MEX-CAL", ignoreCase = true) && 
+            status.startsWith("Vac", ignoreCase = true) &&
+            (economicNumber.startsWith("2133") || mexCalType == "Interplanta")
+        }
+        "Intermodal" -> {
+            type == "Intermodal" && status.startsWith("Vac", ignoreCase = true)
+        }
+        "Contenedor vacio" -> {
+            type == "Contenedor Marítimo" && status.startsWith("Vac", ignoreCase = true)
+        }
+        "FG recibos" -> {
+            company.contains("MEX-CAL", ignoreCase = true) &&
+            status.startsWith("Carg", ignoreCase = true) &&
+            loadStatus == "En espera de descarga"
+        }
+        "Pendientes" -> {
+            status.startsWith("Carg", ignoreCase = true) &&
+            (loadStatus == "Falta por completar" || loadStatus == "Falta por procesar" || loadStatus == "Pendiente por completar" || loadStatus == "Pendiente por procesar")
+        }
+        "Almacenaje" -> {
+            isStorageOnly || loadStatus == "Almacenaje" || company.contains("ALMACENAJE", ignoreCase = true)
+        }
+        "Total unidades vacias" -> {
+            status.startsWith("Vac", ignoreCase = true)
+        }
+        else -> true
+    }
+}
+
+@Composable
+fun InventorySummaryCards(
+    allContainers: List<ContainerItem>,
+    selectedFilter: String?,
+    onFilterSelected: (String) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    // 1. Mex-cal export (Vacíos de exportación)
+    val totalMexCalExportVacio = allContainers.count { 
+        it.company.equals("MEX-CAL", ignoreCase = true) && 
+        it.status.startsWith("Vac", ignoreCase = true) &&
+        (it.economicNumber.startsWith("2130") || it.economicNumber.startsWith("2131") || it.economicNumber.startsWith("2132") || it.mexCalType == "Exportación")
+    }
+
+    // 2. Mex-cal mxdc (Vacíos de interplanta)
+    val totalMexCalMxdcVacio = allContainers.count { 
+        it.company.equals("MEX-CAL", ignoreCase = true) && 
+        it.status.startsWith("Vac", ignoreCase = true) &&
+        (it.economicNumber.startsWith("2133") || it.mexCalType == "Interplanta")
+    }
+    
+    // 3. Intermodal (Vacíos)
+    val totalIntermodalVacio = allContainers.count { 
+        it.type == "Intermodal" && it.status.startsWith("Vac", ignoreCase = true) 
+    }
+    
+    // 4. Contenedor vacio (Marítimos)
+    val totalContenedorVacio = allContainers.count { 
+        it.type == "Contenedor Marítimo" && it.status.startsWith("Vac", ignoreCase = true) 
+    }
+
+    // --- ALIGNING WITH ReportRepository.kt logic ---
+    
+    // 5. FG recibos
+    val totalFgRecibos = allContainers.count {
+        it.company.contains("MEX-CAL", ignoreCase = true) &&
+        it.status.startsWith("Carg", ignoreCase = true) &&
+        it.loadStatus == "En espera de descarga"
+    }
+    
+    // 6. Exportación (Ready to go)
+    val totalExportacionReady = allContainers.count { 
+        it.status.startsWith("Carg", ignoreCase = true) &&
+        (it.loadStatus == "En espera de salida") &&
+        !it.isStorageOnly &&
+        !it.company.contains("ALMACENAJE", ignoreCase = true) &&
+        (
+            !it.company.contains("MEX-CAL", ignoreCase = true) || 
+            !it.destination.isNullOrBlank()
+        )
+    }
+
+    // 7. Pendientes
+    val totalPendientes = allContainers.count {
+        it.status.startsWith("Carg", ignoreCase = true) &&
+        (it.loadStatus == "Falta por completar" || it.loadStatus == "Falta por procesar" || it.loadStatus == "Pendiente por completar" || it.loadStatus == "Pendiente por procesar")
+    }
+
+    // 8. Almacenaje
+    val totalAlmacenaje = allContainers.count {
+        it.isStorageOnly || it.loadStatus == "Almacenaje" || it.company.contains("ALMACENAJE", ignoreCase = true)
+    }
+
+    val totalVaciasHoy = allContainers.count { it.status.startsWith("Vac", ignoreCase = true) }
+
+    Column(
+        modifier = modifier,
+        verticalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        // --- SECCIÓN DE LISTOS (ÉNFAISIS) ---
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable { onFilterSelected("LISTOS PARA EXPORTACIÓN") },
+            colors = CardDefaults.cardColors(
+                containerColor = if (selectedFilter == "LISTOS PARA EXPORTACIÓN") Color(0xFF1565C0) else Color(0xFFE3F2FD)
+            ),
+            elevation = CardDefaults.cardElevation(4.dp),
+            shape = RoundedCornerShape(12.dp),
+            border = if (selectedFilter == "LISTOS PARA EXPORTACIÓN") BorderStroke(2.dp, Color.White) else null
+        ) {
+            Row(
+                modifier = Modifier.padding(16.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(
+                    modifier = Modifier.size(45.dp).background(
+                        if (selectedFilter == "LISTOS PARA EXPORTACIÓN") Color.White else Color(0xFF1565C0), 
+                        CircleShape
+                    ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        Icons.Default.LocalShipping, 
+                        null, 
+                        tint = if (selectedFilter == "LISTOS PARA EXPORTACIÓN") Color(0xFF1565C0) else Color.White
+                    )
+                }
+                Spacer(modifier = Modifier.width(16.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    val mainColor = if (selectedFilter == "LISTOS PARA EXPORTACIÓN") Color.White else Color(0xFF1565C0)
+                    Text("LISTOS PARA EXPORTACIÓN", fontWeight = FontWeight.Black, fontSize = 13.sp, color = mainColor)
+                    Text("Unidades cargadas en espera de salida", fontSize = 11.sp, color = mainColor.copy(0.7f))
+                }
+                Text(
+                    text = "$totalExportacionReady",
+                    fontWeight = FontWeight.Black,
+                    fontSize = 32.sp,
+                    color = if (selectedFilter == "LISTOS PARA EXPORTACIÓN") Color.White else Color(0xFF1565C0)
+                )
+            }
+        }
+
+        // --- FILA 1: MEX-CAL ---
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+            SummarySmallCard(
+                title = "Mex-cal export",
+                count = totalMexCalExportVacio,
+                color = if (selectedFilter == "Mex-cal export") Color(0xFF2E7D32) else Color(0xFFE8F5E9), 
+                textColor = if (selectedFilter == "Mex-cal export") Color.White else Color(0xFF2E7D32),
+                isSelected = selectedFilter == "Mex-cal export",
+                onClick = { onFilterSelected("Mex-cal export") },
+                modifier = Modifier.weight(1f)
+            )
+            SummarySmallCard(
+                title = "Mex-cal mxdc",
+                count = totalMexCalMxdcVacio,
+                color = if (selectedFilter == "Mex-cal mxdc") Color(0xFF558B2F) else Color(0xFFF1F8E9), 
+                textColor = if (selectedFilter == "Mex-cal mxdc") Color.White else Color(0xFF558B2F),
+                isSelected = selectedFilter == "Mex-cal mxdc",
+                onClick = { onFilterSelected("Mex-cal mxdc") },
+                modifier = Modifier.weight(1f)
+            )
+        }
+
+        // --- FILA 2: OTROS VACÍOS ---
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+            SummarySmallCard(
+                title = "Intermodal",
+                count = totalIntermodalVacio,
+                color = if (selectedFilter == "Intermodal") Color(0xFF7B1FA2) else Color(0xFFF3E5F5), 
+                textColor = if (selectedFilter == "Intermodal") Color.White else Color(0xFF7B1FA2),
+                isSelected = selectedFilter == "Intermodal",
+                onClick = { onFilterSelected("Intermodal") },
+                modifier = Modifier.weight(1f)
+            )
+            SummarySmallCard(
+                title = "Contenedor vacio",
+                count = totalContenedorVacio,
+                color = if (selectedFilter == "Contenedor vacio") Color(0xFFC62828) else Color(0xFFFFEBEE), 
+                textColor = if (selectedFilter == "Contenedor vacio") Color.White else Color(0xFFC62828),
+                isSelected = selectedFilter == "Contenedor vacio",
+                onClick = { onFilterSelected("Contenedor vacio") },
+                modifier = Modifier.weight(1f)
+            )
+        }
+
+        // --- FILA 3: RECIBOS / PENDIENTES ---
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+            SummarySmallCard(
+                title = "FG recibos",
+                count = totalFgRecibos,
+                color = if (selectedFilter == "FG recibos") Color(0xFFE65100) else Color(0xFFFFF3E0), 
+                textColor = if (selectedFilter == "FG recibos") Color.White else Color(0xFFE65100),
+                isSelected = selectedFilter == "FG recibos",
+                onClick = { onFilterSelected("FG recibos") },
+                modifier = Modifier.weight(1f)
+            )
+            SummarySmallCard(
+                title = "Pendientes",
+                count = totalPendientes,
+                color = if (selectedFilter == "Pendientes") Color(0xFF424242) else Color(0xFFF5F5F5), 
+                textColor = if (selectedFilter == "Pendientes") Color.White else Color(0xFF424242),
+                isSelected = selectedFilter == "Pendientes",
+                onClick = { onFilterSelected("Pendientes") },
+                modifier = Modifier.weight(1f)
+            )
+        }
+
+        // --- FILA 4: ALMACENAJE / TOTAL ---
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+            SummarySmallCard(
+                title = "Almacenaje",
+                count = totalAlmacenaje,
+                color = if (selectedFilter == "Almacenaje") Color(0xFF1976D2) else Color(0xFFE3F2FD), 
+                textColor = if (selectedFilter == "Almacenaje") Color.White else Color(0xFF1976D2),
+                isSelected = selectedFilter == "Almacenaje",
+                onClick = { onFilterSelected("Almacenaje") },
+                modifier = Modifier.weight(1f)
+            )
+            Card(
+                modifier = Modifier
+                    .weight(1f)
+                    .clickable { onFilterSelected("Total unidades vacias") },
+                colors = CardDefaults.cardColors(
+                    containerColor = if (selectedFilter == "Total unidades vacias") MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.secondaryContainer
+                ),
+                shape = RoundedCornerShape(12.dp),
+                border = if (selectedFilter == "Total unidades vacias") BorderStroke(2.dp, MaterialTheme.colorScheme.onSecondary) else null
+            ) {
+                Column(modifier = Modifier.padding(12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                    val textColor = if (selectedFilter == "Total unidades vacias") MaterialTheme.colorScheme.onSecondary else MaterialTheme.colorScheme.onSecondaryContainer
+                    Text("Total unidades vacias", fontSize = 11.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center, color = textColor)
+                    Text("$totalVaciasHoy", fontSize = 22.sp, fontWeight = FontWeight.Black, color = textColor)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun SummarySmallCard(
+    title: String,
+    count: Int,
+    color: Color,
+    textColor: Color,
+    modifier: Modifier = Modifier,
+    isSelected: Boolean = false,
+    onClick: () -> Unit = {}
+) {
+    Card(
+        modifier = modifier.clickable { onClick() },
+        colors = CardDefaults.cardColors(containerColor = color),
+        shape = RoundedCornerShape(12.dp),
+        border = if (isSelected) BorderStroke(2.dp, textColor) else null
+    ) {
+        Column(
+            modifier = Modifier.padding(12.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text(
+                text = title,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Bold,
+                color = textColor,
+                textAlign = TextAlign.Center
+            )
+            Text(
+                text = count.toString(),
+                fontSize = 22.sp,
+                fontWeight = FontWeight.ExtraBold,
+                color = textColor
+            )
+        }
+    }
+}
+
 @Composable
 fun DockConditionsTabContent(
     conditions: List<DockCondition>,
-    onInspectDock: (DockCondition) -> Unit
+    onInspectDock: (DockCondition) -> Unit,
+    modifier: Modifier = Modifier
 ) {
     if (conditions.isEmpty()) {
-        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        Box(modifier = modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             CircularProgressIndicator()
         }
     } else {
         LazyColumn(
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(16.dp),
+            modifier = modifier.fillMaxSize(),
+            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 80.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             item {
@@ -859,23 +1347,25 @@ fun DockConditionsTabContent(
 fun DamagedBoxesTabContent(
     damagedBoxes: List<DamagedBox>,
     onEditDamaged: (DamagedBox) -> Unit,
-    onDeleteDamaged: (Long) -> Unit
+    onDeleteDamaged: (Long) -> Unit,
+    modifier: Modifier = Modifier
 ) {
     if (damagedBoxes.isEmpty()) {
         EmptyStateView(
-            title = "Sin cajas dañadas reportadas",
-            subtitle = "Usa el botón flotante (+) para registrar una unidad dañada detectada el día de hoy.",
-            icon = Icons.Outlined.BrokenImage
+            title = "Sin unidades rechazadas reportadas",
+            subtitle = "Usa el botón flotante (+) para registrar una unidad rechazada detectada el día de hoy.",
+            icon = Icons.Outlined.CancelPresentation,
+            modifier = modifier
         )
     } else {
         LazyColumn(
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(16.dp),
+            modifier = modifier.fillMaxSize(),
+            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 80.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             item {
                 Text(
-                    text = "Cajas dañadas el día de hoy: ${damagedBoxes.size} unidades",
+                    text = "Unidades rechazadas el día de hoy: ${damagedBoxes.size} unidades",
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.error,
                     style = MaterialTheme.typography.titleMedium
@@ -898,18 +1388,20 @@ fun SyncAndExportTabContent(
     googleAccount: GoogleSignInAccount?,
     driveSyncState: DriveSyncState,
     onSignIn: () -> Unit,
-    onSignOut: () -> Unit
+    onSignOut: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
-    var selectedFormat by remember { mutableStateOf("excel") } // "excel" or "csv"
     val activeReport by viewModel.activeReport.collectAsState()
     val shiftState = remember(activeReport) { mutableStateOf(activeReport?.shift ?: "") }
     val supervisorState = remember(activeReport) { mutableStateOf(activeReport?.supervisorName ?: "") }
 
+    var selectedFormat by remember { mutableStateOf("excel") } // "excel" o "csv"
+
     LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(16.dp),
+        modifier = modifier.fillMaxSize(),
+        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 80.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         // Metadata Identification Section
@@ -992,21 +1484,21 @@ fun SyncAndExportTabContent(
                         )
                         Spacer(modifier = Modifier.width(12.dp))
                         Text(
-                            text = "Exportación de Reportes",
+                            text = "Exportación Local",
                             fontWeight = FontWeight.Bold,
                             style = MaterialTheme.typography.titleMedium,
                             color = MaterialTheme.colorScheme.onSecondaryContainer
                         )
                     }
-                    Spacer(modifier = Modifier.height(10.dp))
+                    Spacer(modifier = Modifier.height(16.dp))
+                    
                     Text(
-                        text = "Genera reportes locales en formato Excel con diseño visual o en formato CSV de texto plano para compartir por WhatsApp, correo o abrir de forma nativa en Microsoft 365.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        text = "Selecciona el formato de exportación:",
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.Bold
                     )
-                    Spacer(modifier = Modifier.height(14.dp))
-
-                    // Format selector
+                    Spacer(modifier = Modifier.height(8.dp))
+                    
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -1014,23 +1506,25 @@ fun SyncAndExportTabContent(
                         FilterChip(
                             selected = selectedFormat == "excel",
                             onClick = { selectedFormat = "excel" },
-                            label = { Text("Excel con Formato (.xls)") },
+                            label = { Text("Excel (.xls)") },
                             leadingIcon = if (selectedFormat == "excel") {
-                                { Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp)) }
+                                { Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(18.dp)) }
                             } else null,
                             modifier = Modifier.weight(1f)
                         )
                         FilterChip(
                             selected = selectedFormat == "csv",
                             onClick = { selectedFormat = "csv" },
-                            label = { Text("Texto Plano CSV (.csv)") },
+                            label = { Text("CSV (.csv)") },
                             leadingIcon = if (selectedFormat == "csv") {
-                                { Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp)) }
+                                { Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(18.dp)) }
                             } else null,
                             modifier = Modifier.weight(1f)
                         )
                     }
 
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Divider(color = MaterialTheme.colorScheme.outlineVariant)
                     Spacer(modifier = Modifier.height(16.dp))
 
                     // Button 1: Inventario de Cajas
@@ -1100,7 +1594,7 @@ fun SyncAndExportTabContent(
                     ) {
                         Icon(Icons.Default.Share, contentDescription = null)
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("Exportar Cajas Dañadas")
+                        Text("Exportar Unidades Rechazadas")
                     }
 
                     Spacer(modifier = Modifier.height(12.dp))
@@ -1231,6 +1725,35 @@ fun SyncAndExportTabContent(
                 }
             }
         }
+
+        // Credits Section
+        item {
+            Spacer(modifier = Modifier.height(24.dp))
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Image(
+                    painter = painterResource(id = R.drawable.logicont_logo),
+                    contentDescription = "Logicont Chain Logo",
+                    modifier = Modifier.size(120.dp),
+                    contentScale = ContentScale.Fit
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = "Mauricio Marquez",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                Text(
+                    text = "@cybercadtm",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.secondary
+                )
+                Spacer(modifier = Modifier.height(32.dp))
+            }
+        }
     }
 }
 
@@ -1239,10 +1762,10 @@ fun SyncAndExportTabContent(
 // --------------------------------------------------------
 
 @Composable
-fun SectionHeader(title: String, icon: androidx.compose.ui.graphics.vector.ImageVector, color: Color) {
+fun SectionHeader(title: String, icon: androidx.compose.ui.graphics.vector.ImageVector, color: Color, modifier: Modifier = Modifier) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier.padding(vertical = 4.dp)
+        modifier = modifier.padding(vertical = 4.dp)
     ) {
         Icon(icon, contentDescription = null, tint = color, modifier = Modifier.size(22.dp))
         Spacer(modifier = Modifier.width(8.dp))
@@ -1259,10 +1782,11 @@ fun SectionHeader(title: String, icon: androidx.compose.ui.graphics.vector.Image
 fun EmptyStateView(
     title: String,
     subtitle: String,
-    icon: androidx.compose.ui.graphics.vector.ImageVector
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    modifier: Modifier = Modifier
 ) {
     Column(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxSize()
             .padding(32.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -1295,230 +1819,130 @@ fun EmptyStateView(
 fun DockRowCard(
     dockNumber: Int,
     unit: ContainerItem?,
-    category: String,
     onAdd: () -> Unit,
     onEdit: () -> Unit,
     onDelete: () -> Unit,
+    modifier: Modifier = Modifier,
     isOutOfService: Boolean = false
 ) {
+    var expanded by remember { mutableStateOf(false) }
+
+    val cardColor = if (isOutOfService) {
+        MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.2f)
+    } else if (unit == null) {
+        MaterialTheme.colorScheme.surface
+    } else {
+        when (unit.type) {
+            "Caja Seca" -> Color(0xFFE8F5E9) // Verde suave
+            "Intermodal" -> Color(0xFFF3E5F5) // Morado suave
+            "Contenedor Marítimo" -> Color(0xFFFFEBEE) // Rojo suave
+            else -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+        }
+    }
+
     Card(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
-            .clickable { if (unit == null) onAdd() },
+            .animateContentSize()
+            .clickable { 
+                if (unit == null) onAdd() else expanded = !expanded 
+            },
         shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = if (isOutOfService) {
-                MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.3f)
-            } else if (unit == null) {
-                MaterialTheme.colorScheme.surfaceColorAtElevation(1.dp)
-            } else {
-                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-            }
-        )
+        colors = CardDefaults.cardColors(containerColor = cardColor),
+        elevation = CardDefaults.cardElevation(defaultElevation = if (unit != null) 2.dp else 0.dp),
+        border = if (unit == null) BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant) else null
     ) {
-        Row(
-            modifier = Modifier
-                .padding(16.dp)
-                .fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            // Dock indicator circle
-            Box(
-                modifier = Modifier
-                    .size(48.dp)
-                    .clip(CircleShape)
-                    .background(
-                        if (isOutOfService) MaterialTheme.colorScheme.error
-                        else if (unit == null) MaterialTheme.colorScheme.surfaceVariant
-                        else MaterialTheme.colorScheme.primaryContainer
-                    ),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = dockNumber.toString(),
-                    fontWeight = FontWeight.Black,
-                    fontSize = 18.sp,
-                    color = if (isOutOfService) MaterialTheme.colorScheme.onError
-                    else if (unit == null) MaterialTheme.colorScheme.onSurfaceVariant
-                    else MaterialTheme.colorScheme.onPrimaryContainer
-                )
-            }
-
-            Spacer(modifier = Modifier.width(16.dp))
-
-            if (unit == null) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(text = "Andén Vacío", fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                        if (isOutOfService) {
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Surface(
-                                color = MaterialTheme.colorScheme.error,
-                                shape = RoundedCornerShape(4.dp)
-                            ) {
-                                Text(
-                                    "FUERA DE SERVICIO",
-                                    fontSize = 9.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.onError,
-                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                                )
-                            }
-                        }
-                    }
-                    Text(text = "Toca para registrar contenedor", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Column(modifier = Modifier.padding(12.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                // Dock indicator circle
+                Box(
+                    modifier = Modifier
+                        .size(44.dp)
+                        .clip(CircleShape)
+                        .background(
+                            if (isOutOfService) MaterialTheme.colorScheme.error
+                            else if (unit == null) MaterialTheme.colorScheme.surfaceVariant
+                            else MaterialTheme.colorScheme.primary
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = dockNumber.toString(),
+                        fontWeight = FontWeight.Black,
+                        fontSize = 18.sp,
+                        color = if (isOutOfService || unit != null) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
-                IconButton(onClick = onAdd, modifier = Modifier.testTag("add_dock_unit_btn_$dockNumber")) {
-                    Icon(Icons.Default.AddCircle, contentDescription = "Añadir a andén $dockNumber", tint = MaterialTheme.colorScheme.primary)
-                }
-            } else {
-                Column(modifier = Modifier.weight(1f)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        SuggestionChip(
-                            onClick = {},
-                            label = { Text(unit.type) },
-                            colors = SuggestionChipDefaults.suggestionChipColors(containerColor = MaterialTheme.colorScheme.surface)
+
+                Spacer(modifier = Modifier.width(12.dp))
+
+                if (unit == null) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = if (isOutOfService) "FUERA DE SERVICIO" else "Andén Disponible",
+                            fontWeight = FontWeight.Bold,
+                            color = if (isOutOfService) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant
                         )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        if (unit.status == "Cargada") {
-                            Badge(containerColor = MaterialTheme.colorScheme.error) {
-                                Text("Cargada", color = Color.White, modifier = Modifier.padding(2.dp))
-                            }
-                        } else {
-                            Badge(containerColor = MaterialTheme.colorScheme.primary) {
-                                Text("Vacía", color = Color.White, modifier = Modifier.padding(2.dp))
-                            }
-                        }
-                        if (isOutOfService) {
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Surface(
-                                color = MaterialTheme.colorScheme.error,
-                                shape = RoundedCornerShape(4.dp)
-                            ) {
-                                Text(
-                                    "F. DE SERVICIO",
-                                    fontSize = 9.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.onError,
-                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                                )
-                            }
-                        }
+                        Text("Toca para registrar", fontSize = 11.sp, color = Color.Gray)
                     }
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = "No. Económico: ${unit.economicNumber}",
-                        fontWeight = FontWeight.ExtraBold,
-                        fontSize = 16.sp,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                    Text(
-                        text = "Placas: ${unit.plates} (${unit.platesLocation})",
-                        fontSize = 13.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.padding(top = 2.dp)
+                    Icon(Icons.Default.AddCircleOutline, contentDescription = null, tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.6f))
+                } else {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            val dockIcon = when (unit.type) {
+                                "Caja Seca" -> Icons.Default.LocalShipping
+                                "Intermodal" -> Icons.Default.Garage
+                                "Contenedor Marítimo" -> Icons.Default.ViewInAr
+                                else -> Icons.Default.Inventory
+                            }
+                            Icon(dockIcon, null, Modifier.size(16.dp), tint = Color.DarkGray)
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(unit.economicNumber, fontWeight = FontWeight.ExtraBold, fontSize = 17.sp)
+                        }
+                        Text("${unit.type} • ${unit.company}", fontSize = 11.sp, color = Color.DarkGray)
+                    }
+
+                    Surface(
+                        color = if (unit.status.startsWith("Carg", ignoreCase = true)) Color(0xFFC62828) else Color(0xFF2E7D32),
+                        shape = RoundedCornerShape(16.dp)
                     ) {
                         Text(
-                            text = "Compañía: ${unit.company}",
-                            fontSize = 12.sp,
+                            unit.status.uppercase(),
+                            color = Color.White,
+                            fontSize = 9.sp,
                             fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.primary
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                         )
-                        if (!unit.containerSize.isNullOrEmpty()) {
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(
-                                text = "• Medida: ${unit.containerSize}",
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = MaterialTheme.colorScheme.secondary
-                            )
-                        }
-                    }
-
-                    if (unit.status == "Cargada" && unit.loadStatus != null) {
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text = "Estatus: ${unit.loadStatus}",
-                            color = when (unit.loadStatus) {
-                                "En espera de salida" -> MaterialTheme.colorScheme.error
-                                "Falta por completar" -> Color(0xFFE65100)
-                                else -> MaterialTheme.colorScheme.secondary
-                            },
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 13.sp
-                        )
-                        val hasDetails = !unit.sealCode.isNullOrEmpty() || 
-                                         !unit.destination.isNullOrEmpty() || 
-                                         !unit.deliveryDocument.isNullOrEmpty() || 
-                                         !unit.processedDate.isNullOrEmpty()
-                        if (hasDetails) {
-                            Column(
-                                modifier = Modifier
-                                    .padding(top = 4.dp)
-                                    .background(Color(0xFFFFEBEE), RoundedCornerShape(4.dp))
-                                    .padding(6.dp)
-                            ) {
-                                if (unit.loadStatus == "En espera de salida" && !unit.sealCode.isNullOrEmpty()) {
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Icon(Icons.Default.QrCode, contentDescription = null, size20(), tint = Color(0xFFC62828))
-                                        Spacer(modifier = Modifier.width(4.dp))
-                                        Text(
-                                            text = "Sello No: ${unit.sealCode}",
-                                            fontWeight = FontWeight.Bold,
-                                            fontSize = 12.sp,
-                                            color = Color(0xFFC62828)
-                                        )
-                                    }
-                                }
-                                if (!unit.destination.isNullOrEmpty()) {
-                                    if (unit.loadStatus == "En espera de salida" && !unit.sealCode.isNullOrEmpty()) {
-                                        Spacer(modifier = Modifier.height(2.dp))
-                                    }
-                                    Text(
-                                        text = "Destino: ${unit.destination}",
-                                        fontSize = 12.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = Color(0xFFC62828)
-                                    )
-                                }
-                                if (!unit.deliveryDocument.isNullOrEmpty()) {
-                                    Spacer(modifier = Modifier.height(2.dp))
-                                    Text(
-                                        text = "Delivery/Doc: ${unit.deliveryDocument}",
-                                        fontSize = 12.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = Color(0xFFC62828)
-                                    )
-                                }
-                                if (!unit.processedDate.isNullOrEmpty()) {
-                                    Spacer(modifier = Modifier.height(2.dp))
-                                    Text(
-                                        text = "Procesado: ${unit.processedDate}",
-                                        fontSize = 12.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = Color(0xFFC62828)
-                                    )
-                                }
-                            }
-                        }
                     }
                 }
+            }
 
-                IconButton(
-                    onClick = onEdit,
-                    modifier = Modifier.testTag("edit_dock_unit_btn_$dockNumber")
-                ) {
-                    Icon(Icons.Default.Edit, contentDescription = "Editar unidad", tint = MaterialTheme.colorScheme.primary)
+            if (unit != null && expanded) {
+                Spacer(modifier = Modifier.height(12.dp))
+                Divider(color = Color.Black.copy(alpha = 0.05f))
+                Spacer(modifier = Modifier.height(8.dp))
+                
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    DetailRow(label = "Placas", value = "${unit.plates} (${unit.platesLocation})")
+                    if (!unit.receptionDate.isNullOrBlank()) DetailRow(label = "Entrada", value = unit.receptionDate)
+                    if (unit.status.startsWith("Carg", ignoreCase = true)) {
+                        DetailRow(label = "Estatus", value = unit.loadStatus ?: "Cargada")
+                        if (!unit.destination.isNullOrBlank()) DetailRow(label = "Destino", value = unit.destination)
+                        if (!unit.sealCode.isNullOrBlank()) DetailRow(label = "Sello", value = unit.sealCode)
+                    }
                 }
-                Spacer(modifier = Modifier.width(4.dp))
-                IconButton(
-                    onClick = onDelete,
-                    modifier = Modifier.testTag("delete_dock_unit_btn_$dockNumber")
-                ) {
-                    Icon(Icons.Default.DeleteOutline, contentDescription = "Remover unidad", tint = MaterialTheme.colorScheme.error)
+                
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                    IconButton(onClick = onEdit) { Icon(Icons.Default.Edit, null, tint = MaterialTheme.colorScheme.primary) }
+                    IconButton(onClick = onDelete) { Icon(Icons.Default.Delete, null, tint = MaterialTheme.colorScheme.error) }
+                }
+            } else if (unit != null) {
+                // Vista corta en andén
+                Row(Modifier.padding(top = 6.dp, start = 56.dp), verticalAlignment = Alignment.CenterVertically) {
+                    val shortDesc = if (unit.status.startsWith("Carg", ignoreCase = true)) 
+                        unit.loadStatus ?: "Cargada" 
+                        else "Vacía / Disponible"
+                    Text(shortDesc, fontSize = 11.sp, color = Color.Gray, fontWeight = FontWeight.Medium)
                 }
             }
         }
@@ -1529,150 +1953,157 @@ fun DockRowCard(
 fun ContainerItemCard(
     container: ContainerItem,
     onEdit: () -> Unit,
-    onDelete: () -> Unit
+    onDelete: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
+    var expanded by remember { mutableStateOf(false) }
+
+    val cardColor = when (container.type) {
+        "Caja Seca" -> Color(0xFFE8F5E9) // Verde suave
+        "Intermodal" -> Color(0xFFF3E5F5) // Morado suave
+        "Contenedor Marítimo" -> Color(0xFFFFEBEE) // Rojo suave
+        else -> MaterialTheme.colorScheme.surface
+    }
+
+    val icon = when (container.type) {
+        "Caja Seca" -> Icons.Default.LocalShipping
+        "Intermodal" -> Icons.Default.Garage
+        "Contenedor Marítimo" -> Icons.Default.ViewInAr
+        else -> Icons.Default.Help
+    }
+
+    val statusColor = if (container.status.startsWith("Carg", ignoreCase = true)) {
+        Color(0xFFC62828) // Rojo fuerte
+    } else {
+        Color(0xFF2E7D32) // Verde fuerte
+    }
+
     Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(12.dp)
+        modifier = modifier
+            .fillMaxWidth()
+            .animateContentSize()
+            .clickable { expanded = !expanded },
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(containerColor = cardColor),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
-        Row(
-            modifier = Modifier.padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(40.dp)
-                    .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.surfaceVariant),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(Icons.Default.Garage, contentDescription = null)
-            }
-
-            Spacer(modifier = Modifier.width(16.dp))
-
-            Column(modifier = Modifier.weight(1f)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    SuggestionChip(
-                        onClick = {},
-                        label = { Text(container.type) }
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Badge(containerColor = if (container.status == "Cargada") MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary) {
-                        Text(container.status, color = Color.White, modifier = Modifier.padding(2.dp))
-                    }
+        Column(modifier = Modifier.padding(12.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clip(CircleShape)
+                        .background(Color.White.copy(alpha = 0.6f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.onSurface)
                 }
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = "No. Económico: ${container.economicNumber}",
-                    fontWeight = FontWeight.ExtraBold,
-                    fontSize = 16.sp
-                )
-                Text(
-                    text = "Placas: ${container.plates} (${container.platesLocation})",
-                    fontSize = 13.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.padding(top = 2.dp)
+
+                Spacer(modifier = Modifier.width(12.dp))
+
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = container.economicNumber,
+                        fontWeight = FontWeight.ExtraBold,
+                        fontSize = 18.sp,
+                        color = Color.Black
+                    )
+                    Text(
+                        text = "${container.type} • ${container.company}",
+                        fontSize = 12.sp,
+                        color = Color.DarkGray
+                    )
+                }
+
+                Surface(
+                    color = statusColor,
+                    shape = RoundedCornerShape(16.dp)
                 ) {
                     Text(
-                        text = "Compañía: ${container.company}",
-                        fontSize = 12.sp,
+                        text = container.status.uppercase(),
+                        color = Color.White,
+                        fontSize = 10.sp,
                         fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                     )
-                    if (!container.containerSize.isNullOrEmpty()) {
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = "• Medida: ${container.containerSize}",
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.secondary
-                        )
-                    }
                 }
+            }
 
-                if (container.status == "Cargada" && container.loadStatus != null) {
-                    Text(
-                        text = "Estatus de Carga: ${container.loadStatus}",
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 13.sp,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                    val hasDetails = !container.sealCode.isNullOrEmpty() || 
-                                     !container.destination.isNullOrEmpty() || 
-                                     !container.deliveryDocument.isNullOrEmpty() || 
-                                     !container.processedDate.isNullOrEmpty()
-                    if (hasDetails) {
-                        Column(
-                            modifier = Modifier
-                                .padding(top = 4.dp)
-                                .background(Color(0xFFFFEBEE), RoundedCornerShape(4.dp))
-                                .padding(6.dp)
+            if (expanded) {
+                Spacer(modifier = Modifier.height(12.dp))
+                Divider(color = Color.Black.copy(alpha = 0.1f))
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    DetailRow(label = "Placas", value = "${container.plates} (${container.platesLocation})")
+                    if (!container.receptionDate.isNullOrBlank()) {
+                        DetailRow(label = "Entrada", value = container.receptionDate)
+                    }
+                    if (container.status.startsWith("Carg", ignoreCase = true)) {
+                        DetailRow(label = "Carga", value = container.loadStatus ?: "N/A")
+                        if (!container.destination.isNullOrBlank()) DetailRow(label = "Destino", value = container.destination)
+                        if (!container.sealCode.isNullOrBlank()) DetailRow(label = "Sello", value = container.sealCode)
+                    }
+                    if (container.isStorageOnly) {
+                        Surface(
+                            color = Color(0xFFFFB300),
+                            shape = RoundedCornerShape(4.dp),
+                            modifier = Modifier.padding(top = 4.dp)
                         ) {
-                            if (container.loadStatus == "En espera de salida" && !container.sealCode.isNullOrEmpty()) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(Icons.Default.QrCode, contentDescription = null, size20(), tint = Color(0xFFC62828))
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    Text(
-                                        text = "Código de Sello: ${container.sealCode}",
-                                        fontWeight = FontWeight.Bold,
-                                        fontSize = 12.sp,
-                                        color = Color(0xFFC62828)
-                                    )
-                                }
-                            }
-                            if (!container.destination.isNullOrEmpty()) {
-                                if (container.loadStatus == "En espera de salida" && !container.sealCode.isNullOrEmpty()) {
-                                    Spacer(modifier = Modifier.height(2.dp))
-                                }
-                                Text(
-                                    text = "Destino: ${container.destination}",
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = Color(0xFFC62828)
-                                )
-                            }
-                            if (!container.deliveryDocument.isNullOrEmpty()) {
-                                Spacer(modifier = Modifier.height(2.dp))
-                                Text(
-                                    text = "Delivery/Doc: ${container.deliveryDocument}",
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = Color(0xFFC62828)
-                                )
-                            }
-                            if (!container.processedDate.isNullOrEmpty()) {
-                                Spacer(modifier = Modifier.height(2.dp))
-                                Text(
-                                    text = "Procesado: ${container.processedDate}",
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = Color(0xFFC62828)
-                                )
-                            }
+                            Text(
+                                "MODO ALMACENAJE",
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            )
                         }
                     }
                 }
-            }
 
-            IconButton(onClick = onEdit) {
-                Icon(Icons.Default.Edit, contentDescription = "Editar de patio", tint = MaterialTheme.colorScheme.primary)
-            }
-            Spacer(modifier = Modifier.width(4.dp))
-            IconButton(onClick = onDelete) {
-                Icon(Icons.Default.DeleteOutline, contentDescription = "Eliminar de patio", tint = MaterialTheme.colorScheme.error)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    IconButton(onClick = onEdit) {
+                        Icon(Icons.Default.Edit, contentDescription = "Editar de patio", tint = MaterialTheme.colorScheme.primary)
+                    }
+                    IconButton(onClick = onDelete) {
+                        Icon(Icons.Outlined.Delete, contentDescription = "Eliminar de patio", tint = MaterialTheme.colorScheme.error)
+                    }
+                }
+            } else {
+                // Vista corta
+                Row(modifier = Modifier.padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Info, contentDescription = null, modifier = Modifier.size(14.dp), tint = Color.Gray)
+                    Spacer(modifier = Modifier.width(4.dp))
+                    val locationDesc = if (container.locationType == "Andén") "en Andén ${container.dockNumber}" else "en Patio"
+                    Text(
+                        text = if (container.status.startsWith("Carg", ignoreCase = true)) 
+                            "Cargada: ${container.loadStatus ?: "Pendiente"}" 
+                            else "Vacía / Disponible $locationDesc",
+                        fontSize = 11.sp,
+                        color = Color.Gray
+                    )
+                }
             }
         }
     }
 }
 
 @Composable
+fun DetailRow(label: String, value: String) {
+    Row {
+        Text(text = "$label: ", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color.DarkGray)
+        Text(text = value, fontSize = 13.sp, color = Color.Black)
+    }
+}
+
+@Composable
 fun DockConditionCard(
     condition: DockCondition,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
     val items = listOf(
         Pair("Rampa", condition.isRampGood),
@@ -1683,14 +2114,17 @@ fun DockConditionCard(
         Pair("Gomas", condition.isRubbersGood),
         Pair("Topes", condition.isSafetyStoppersGood),
         Pair("Semáforo", condition.isTrafficLightsGood),
-        Pair("Luces", condition.isLightsGood)
+        Pair("Luces", condition.isLightsGood),
+        Pair("Empaques", condition.isEmpaquesGood),
+        Pair("Gato", condition.isGatoHidraulicoGood),
+        Pair("Cadena", condition.isCadenaGood)
     )
 
     val badItems = items.filter { !it.second }
     val isOos = condition.isOutOfService
 
     Card(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .clickable(onClick = onClick),
         shape = RoundedCornerShape(12.dp),
@@ -1760,11 +2194,12 @@ fun DockConditionCard(
 
             if (badItems.isNotEmpty()) {
                 Spacer(modifier = Modifier.height(10.dp))
-                Row(
+                FlowRow(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    badItems.take(5).forEach { item ->
+                    badItems.forEach { item ->
                         SuggestionChip(
                             onClick = {},
                             label = { Text(item.first, fontSize = 10.sp) },
@@ -1772,12 +2207,6 @@ fun DockConditionCard(
                                 containerColor = Color(0xFFFFEBEE),
                                 labelColor = Color(0xFFC62828)
                             )
-                        )
-                    }
-                    if (badItems.size > 5) {
-                        SuggestionChip(
-                            onClick = {},
-                            label = { Text("+${badItems.size - 5}", fontSize = 10.sp) }
                         )
                     }
                 }
@@ -1788,8 +2217,7 @@ fun DockConditionCard(
                 Text(
                     text = "Nota: ${condition.notes}",
                     fontSize = 12.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
         }
@@ -1800,10 +2228,11 @@ fun DockConditionCard(
 fun DamagedBoxCard(
     box: DamagedBox,
     onEdit: () -> Unit,
-    onDelete: () -> Unit
+    onDelete: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = modifier.fillMaxWidth(),
         shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF8F8))
     ) {
@@ -1850,18 +2279,19 @@ fun DamagedBoxCard(
             }
             Spacer(modifier = Modifier.width(4.dp))
             IconButton(onClick = onDelete) {
-                Icon(Icons.Default.DeleteOutline, contentDescription = "Eliminar reporte de daño", tint = MaterialTheme.colorScheme.error)
+                Icon(Icons.Outlined.Delete, contentDescription = "Eliminar reporte de daño", tint = MaterialTheme.colorScheme.error)
             }
         }
     }
 }
 
 @Composable
-fun SyncStatusCard(state: DriveSyncState, onDismiss: () -> Unit) {
+fun SyncStatusCard(state: DriveSyncState, onDismiss: () -> Unit, modifier: Modifier = Modifier) {
     AnimatedVisibility(
         visible = state !is DriveSyncState.Idle,
         enter = fadeIn() + expandVertically(),
-        exit = fadeOut() + shrinkVertically()
+        exit = fadeOut() + shrinkVertically(),
+        modifier = modifier
     ) {
         Card(
             modifier = Modifier.fillMaxWidth(),
@@ -1935,9 +2365,6 @@ fun SyncStatusCard(state: DriveSyncState, onDismiss: () -> Unit) {
     }
 }
 
-// Helper icons
-@Composable fun size20() = Modifier.size(20.dp)
-
 // --------------------------------------------------------
 // DIALOG COMPOSABLES
 // --------------------------------------------------------
@@ -1970,27 +2397,41 @@ fun AddContainerDialog(
         materialType: String?
     ) -> Unit
 ) {
+    val context = LocalContext.current
     var type by remember { mutableStateOf(unitToEdit?.type ?: "Caja Seca") }
     var locationType by remember { mutableStateOf(unitToEdit?.locationType ?: locationTypePreset) }
-    var dockNumber by remember { mutableStateOf(unitToEdit?.dockNumber ?: dockNumberPreset ?: 1) }
+    var dockNumber by remember { mutableIntStateOf(unitToEdit?.dockNumber ?: dockNumberPreset ?: 1) }
     var economicNumber by remember { mutableStateOf(unitToEdit?.economicNumber ?: "") }
     var plates by remember { mutableStateOf(unitToEdit?.plates ?: "") }
     var platesLocation by remember { mutableStateOf(unitToEdit?.platesLocation ?: "") }
     var status by remember { mutableStateOf(unitToEdit?.status ?: "Vacía") }
-    var loadStatus by remember { mutableStateOf(unitToEdit?.loadStatus ?: "Falta por completar") }
+    var loadStatus by remember { mutableStateOf(unitToEdit?.loadStatus ?: "Pendiente por completar") }
     var sealCode by remember { mutableStateOf(unitToEdit?.sealCode ?: "") }
     var containerSize by remember { mutableStateOf(unitToEdit?.containerSize ?: "") }
     var destination by remember { mutableStateOf(unitToEdit?.destination ?: "") }
     var deliveryDocument by remember { mutableStateOf(unitToEdit?.deliveryDocument ?: "") }
     var processedDate by remember { mutableStateOf(unitToEdit?.processedDate ?: "") }
-    var isStorageOnly by remember { mutableStateOf(unitToEdit?.isStorageOnly ?: false) }
+    
+    // ENSURE isStorageOnly is strictly tied to "Almacenaje" loadStatus on initialization
+    var isStorageOnly by remember { 
+        mutableStateOf(unitToEdit?.isStorageOnly == true || unitToEdit?.loadStatus == "Almacenaje") 
+    }
+    
     var mexCalType by remember { mutableStateOf(unitToEdit?.mexCalType ?: "Interplanta") }
-    var receptionDate by remember { mutableStateOf(unitToEdit?.receptionDate ?: SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())) }
+    
+    val yesterday = remember {
+        Calendar.getInstance().apply { add(Calendar.DAY_OF_YEAR, -1) }.time
+    }
+    val yesterdayStr = remember(yesterday) {
+        SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(yesterday)
+    }
+    var receptionDate by remember { mutableStateOf(unitToEdit?.receptionDate ?: yesterdayStr) }
+    
     var materialType by remember { mutableStateOf(unitToEdit?.materialType ?: "FG") }
 
     val unitTypes = listOf("Caja Seca", "Intermodal", "Contenedor Marítimo")
     val statusTypes = listOf("Vacía", "Cargada")
-    val loadStatusTypes = listOf("Falta por completar", "Falta por procesar", "En espera de salida")
+    val loadStatusTypes = listOf("En espera de salida", "En espera de descarga", "Pendiente por completar", "Pendiente por procesar", "Almacenaje")
 
     Dialog(onDismissRequest = onDismiss) {
         Card(
@@ -2076,7 +2517,12 @@ fun AddContainerDialog(
                         unitTypes.forEach { t ->
                             FilterChip(
                                 selected = type == t,
-                                onClick = { type = t },
+                                onClick = { 
+                                    type = t 
+                                    if (t != "Caja Seca" && loadStatus == "En espera de descarga") {
+                                        loadStatus = "En espera de salida"
+                                    }
+                                },
                                 label = { Text(t, fontSize = 12.sp) },
                                 modifier = Modifier.weight(1f)
                             )
@@ -2084,23 +2530,6 @@ fun AddContainerDialog(
                     }
                 }
 
-                // Almacenaje
-                item {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { isStorageOnly = !isStorageOnly }
-                            .padding(vertical = 4.dp)
-                    ) {
-                        Checkbox(
-                            checked = isStorageOnly,
-                            onCheckedChange = { isStorageOnly = it }
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("Solo para Almacenaje", fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                    }
-                }
 
                 // Compañía (No modificable)
                 item {
@@ -2144,7 +2573,16 @@ fun AddContainerDialog(
                     Column {
                         OutlinedTextField(
                             value = economicNumber,
-                            onValueChange = { economicNumber = it },
+                            onValueChange = { 
+                                economicNumber = it
+                                if (type == "Caja Seca") {
+                                    if (it.startsWith("2133")) {
+                                        mexCalType = "Interplanta"
+                                    } else if (it.startsWith("2131") || it.startsWith("2132")) {
+                                        mexCalType = "Exportación"
+                                    }
+                                }
+                            },
                             label = { Text("Número Económico") },
                             placeholder = { Text("Ej. E-123") },
                             modifier = Modifier
@@ -2155,33 +2593,45 @@ fun AddContainerDialog(
 
                         val exactMatch = remember(economicNumber, containersHistory) {
                             if (economicNumber.trim().isBlank()) null
-                            else containersHistory.firstOrNull { it.economicNumber.equals(economicNumber.trim(), ignoreCase = true) }
+                            else containersHistory
+                                .filter { it.economicNumber.equals(economicNumber.trim(), ignoreCase = true) }
+                                .maxByOrNull { it.timestamp }
                         }
 
                         if (exactMatch != null) {
                             Spacer(modifier = Modifier.height(8.dp))
                             Button(
                                 onClick = {
-                                    type = exactMatch.type
-                                    if (exactMatch.locationType == "Andén" || exactMatch.locationType == "Patio") {
-                                        locationType = exactMatch.locationType
-                                        if (exactMatch.locationType == "Andén") {
-                                            dockNumber = exactMatch.dockNumber ?: 1
-                                        }
-                                    }
+                                    // Load matching data
+                                    economicNumber = exactMatch.economicNumber
                                     plates = exactMatch.plates
                                     platesLocation = exactMatch.platesLocation
+                                    type = exactMatch.type
+                                    receptionDate = exactMatch.receptionDate ?: yesterdayStr
+                                    
+                                    // Update status and its details
                                     status = exactMatch.status
-                                    loadStatus = exactMatch.loadStatus ?: "Falta por completar"
+                                    loadStatus = exactMatch.loadStatus ?: "Pendiente por completar"
+                                    
+                                    // FORCE RESET isStorageOnly unless the new loadStatus is Almacenaje
+                                    isStorageOnly = (loadStatus == "Almacenaje")
+
                                     sealCode = exactMatch.sealCode ?: ""
                                     containerSize = exactMatch.containerSize ?: ""
                                     destination = exactMatch.destination ?: ""
                                     deliveryDocument = exactMatch.deliveryDocument ?: ""
                                     processedDate = exactMatch.processedDate ?: ""
-                                    isStorageOnly = exactMatch.isStorageOnly
                                     mexCalType = exactMatch.mexCalType ?: "Interplanta"
-                                    receptionDate = exactMatch.receptionDate ?: receptionDate
                                     materialType = exactMatch.materialType ?: "FG"
+
+                                    // DO NOT restore location if it was "Andén" to avoid overwriting
+                                    if (exactMatch.locationType == "Patio") {
+                                        locationType = "Patio"
+                                    } else {
+                                        // Reset to avoid errors when registering new unit that was in a dock before
+                                        locationType = ""
+                                        dockNumber = 1
+                                    }
                                 },
                                 colors = ButtonDefaults.buttonColors(
                                     containerColor = MaterialTheme.colorScheme.secondaryContainer,
@@ -2199,11 +2649,14 @@ fun AddContainerDialog(
                             if (economicNumber.isBlank()) {
                                 emptyList()
                             } else {
+                                val oneMonthAgo = System.currentTimeMillis() - (30L * 24 * 60 * 60 * 1000)
                                 containersHistory
                                     .filter { 
                                         it.economicNumber.startsWith(economicNumber, ignoreCase = true) && 
-                                        it.economicNumber.lowercase() != economicNumber.lowercase()
+                                        !it.economicNumber.equals(economicNumber, ignoreCase = true) &&
+                                        (it.company.equals("MEX-CAL", ignoreCase = true) || it.timestamp > oneMonthAgo)
                                     }
+                                    .sortedByDescending { it.timestamp }
                                     .distinctBy { it.economicNumber }
                                     .take(5)
                             }
@@ -2231,23 +2684,28 @@ fun AddContainerDialog(
                                             plates = match.plates
                                             platesLocation = match.platesLocation
                                             type = match.type
+                                            receptionDate = match.receptionDate ?: yesterdayStr
+                                            
                                             status = match.status
-                                            if (match.locationType == "Andén" || match.locationType == "Patio") {
-                                                locationType = match.locationType
-                                                if (match.locationType == "Andén") {
-                                                    dockNumber = match.dockNumber ?: 1
-                                                }
-                                            }
-                                            loadStatus = match.loadStatus ?: "Falta por completar"
+                                            loadStatus = match.loadStatus ?: "Pendiente por completar"
+                                            
+                                            // FORCE RESET isStorageOnly unless the new loadStatus is Almacenaje
+                                            isStorageOnly = (loadStatus == "Almacenaje")
+                                            
                                             sealCode = match.sealCode ?: ""
                                             containerSize = match.containerSize ?: ""
                                             destination = match.destination ?: ""
                                             deliveryDocument = match.deliveryDocument ?: ""
                                             processedDate = match.processedDate ?: ""
-                                            isStorageOnly = match.isStorageOnly
                                             mexCalType = match.mexCalType ?: "Interplanta"
-                                            receptionDate = match.receptionDate ?: receptionDate
                                             materialType = match.materialType ?: "FG"
+
+                                            if (match.locationType == "Patio") {
+                                                locationType = "Patio"
+                                            } else {
+                                                locationType = ""
+                                                dockNumber = 1
+                                            }
                                         },
                                         label = {
                                             Column {
@@ -2278,33 +2736,41 @@ fun AddContainerDialog(
 
                         val exactPlatesMatch = remember(plates, containersHistory) {
                             if (plates.trim().isBlank()) null
-                            else containersHistory.firstOrNull { it.plates.equals(plates.trim(), ignoreCase = true) }
+                            else containersHistory
+                                .filter { it.plates.equals(plates.trim(), ignoreCase = true) }
+                                .maxByOrNull { it.timestamp }
                         }
 
                         if (exactPlatesMatch != null) {
                             Spacer(modifier = Modifier.height(8.dp))
                             Button(
                                 onClick = {
-                                    type = exactPlatesMatch.type
-                                    if (exactPlatesMatch.locationType == "Andén" || exactPlatesMatch.locationType == "Patio") {
-                                        locationType = exactPlatesMatch.locationType
-                                        if (exactPlatesMatch.locationType == "Andén") {
-                                            dockNumber = exactPlatesMatch.dockNumber ?: 1
-                                        }
-                                    }
                                     economicNumber = exactPlatesMatch.economicNumber
+                                    plates = exactPlatesMatch.plates
                                     platesLocation = exactPlatesMatch.platesLocation
+                                    type = exactPlatesMatch.type
+                                    receptionDate = exactPlatesMatch.receptionDate ?: yesterdayStr
+                                    
                                     status = exactPlatesMatch.status
-                                    loadStatus = exactPlatesMatch.loadStatus ?: "Falta por completar"
+                                    loadStatus = exactPlatesMatch.loadStatus ?: "Pendiente por completar"
+                                    
+                                    // FORCE RESET isStorageOnly unless the new loadStatus is Almacenaje
+                                    isStorageOnly = (loadStatus == "Almacenaje")
+                                    
                                     sealCode = exactPlatesMatch.sealCode ?: ""
                                     containerSize = exactPlatesMatch.containerSize ?: ""
                                     destination = exactPlatesMatch.destination ?: ""
                                     deliveryDocument = exactPlatesMatch.deliveryDocument ?: ""
                                     processedDate = exactPlatesMatch.processedDate ?: ""
-                                    isStorageOnly = exactPlatesMatch.isStorageOnly
                                     mexCalType = exactPlatesMatch.mexCalType ?: "Interplanta"
-                                    receptionDate = exactPlatesMatch.receptionDate ?: receptionDate
                                     materialType = exactPlatesMatch.materialType ?: "FG"
+
+                                    if (exactPlatesMatch.locationType == "Patio") {
+                                        locationType = "Patio"
+                                    } else {
+                                        locationType = ""
+                                        dockNumber = 1
+                                    }
                                 },
                                 colors = ButtonDefaults.buttonColors(
                                     containerColor = MaterialTheme.colorScheme.secondaryContainer,
@@ -2322,11 +2788,14 @@ fun AddContainerDialog(
                             if (plates.isBlank()) {
                                 emptyList()
                             } else {
+                                val oneMonthAgo = System.currentTimeMillis() - (30L * 24 * 60 * 60 * 1000)
                                 containersHistory
                                     .filter { 
                                         it.plates.startsWith(plates, ignoreCase = true) && 
-                                        it.plates.lowercase() != plates.lowercase()
+                                        !it.plates.equals(plates, ignoreCase = true) &&
+                                        (it.company.equals("MEX-CAL", ignoreCase = true) || it.timestamp > oneMonthAgo)
                                     }
+                                    .sortedByDescending { it.timestamp }
                                     .distinctBy { it.plates }
                                     .take(5)
                             }
@@ -2354,23 +2823,28 @@ fun AddContainerDialog(
                                             platesLocation = match.platesLocation
                                             economicNumber = match.economicNumber
                                             type = match.type
+                                            receptionDate = match.receptionDate ?: yesterdayStr
+                                            
                                             status = match.status
-                                            if (match.locationType == "Andén" || match.locationType == "Patio") {
-                                                locationType = match.locationType
-                                                if (match.locationType == "Andén") {
-                                                    dockNumber = match.dockNumber ?: 1
-                                                }
-                                            }
-                                            loadStatus = match.loadStatus ?: "Falta por completar"
+                                            loadStatus = match.loadStatus ?: "Pendiente por completar"
+                                            
+                                            // FORCE RESET isStorageOnly unless the new loadStatus is Almacenaje
+                                            isStorageOnly = (loadStatus == "Almacenaje")
+
                                             sealCode = match.sealCode ?: ""
                                             containerSize = match.containerSize ?: ""
                                             destination = match.destination ?: ""
                                             deliveryDocument = match.deliveryDocument ?: ""
                                             processedDate = match.processedDate ?: ""
-                                            isStorageOnly = match.isStorageOnly
                                             mexCalType = match.mexCalType ?: "Interplanta"
-                                            receptionDate = match.receptionDate ?: receptionDate
                                             materialType = match.materialType ?: "FG"
+
+                                            if (match.locationType == "Patio") {
+                                                locationType = "Patio"
+                                            } else {
+                                                locationType = ""
+                                                dockNumber = 1
+                                            }
                                         },
                                         label = {
                                             Column {
@@ -2387,7 +2861,7 @@ fun AddContainerDialog(
 
                 // Lugar de Placas
                 item {
-                    Text("Procedencia de Placas", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                    Text("ORIGEN DE PLACAS", fontWeight = FontWeight.Bold, fontSize = 14.sp)
                     var platesLocExpanded by remember { mutableStateOf(false) }
                     val allowedStates = listOf("California", "Maine", "Tennessee", "Oklahoma", "Indiana")
                     ExposedDropdownMenuBox(
@@ -2395,9 +2869,9 @@ fun AddContainerDialog(
                         onExpandedChange = { platesLocExpanded = !platesLocExpanded }
                     ) {
                         OutlinedTextField(
-                            value = platesLocation,
-                            onValueChange = { platesLocation = it },
-                            label = { Text("Lugar de procedencia de placas") },
+                            value = platesLocation.uppercase(),
+                            onValueChange = { platesLocation = it.uppercase() },
+                            label = { Text("Origen de placas") },
                             placeholder = { Text("Seleccione o escriba el estado") },
                             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = platesLocExpanded) },
                             modifier = Modifier
@@ -2455,7 +2929,7 @@ fun AddContainerDialog(
                 // Tipo de Material
                 item {
                     OutlinedTextField(
-                        value = materialType ?: "FG",
+                        value = materialType,
                         onValueChange = { materialType = it },
                         label = { Text("Tipo de Material") },
                         placeholder = { Text("Ej. FG") },
@@ -2487,23 +2961,38 @@ fun AddContainerDialog(
                         Text("Progreso de Carga", fontWeight = FontWeight.Bold, fontSize = 14.sp)
                         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                             loadStatusTypes.forEach { ls ->
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clickable { loadStatus = ls }
-                                        .padding(vertical = 4.dp)
-                                  ) {
-                                    RadioButton(selected = loadStatus == ls, onClick = { loadStatus = ls })
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Text(ls)
+                                // "En espera de descarga" is only for MEX-CAL
+                                val isVisible = if (ls == "En espera de descarga") type == "Caja Seca" else true
+                                
+                                if (isVisible) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clickable { 
+                                                loadStatus = ls
+                                                isStorageOnly = (ls == "Almacenaje")
+                                            }
+                                            .padding(vertical = 4.dp)
+                                      ) {
+                                        RadioButton(selected = loadStatus == ls, onClick = { 
+                                            loadStatus = ls
+                                            isStorageOnly = (ls == "Almacenaje")
+                                        })
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Text(ls)
+                                    }
                                 }
                             }
                         }
                     }
 
-                    // Código de Sello (solo si es "En espera de salida")
-                    if (loadStatus == "En espera de salida") {
+                    // Código de Sello
+                    val canShowSeal = loadStatus == "En espera de salida" || 
+                                     loadStatus == "Almacenaje" ||
+                                     (isStorageOnly && (loadStatus == "Pendiente por completar" || loadStatus == "Pendiente por procesar"))
+
+                    if (canShowSeal) {
                         item {
                             OutlinedTextField(
                                 value = sealCode,
@@ -2518,23 +3007,28 @@ fun AddContainerDialog(
                             )
                         }
                     }
+                }
 
-                    // Destino, Delivery, Fecha de procesado (for all loaded statuses)
+                // Destino, Delivery, Fecha de procesado
+                val isReciboOrAlmacenaje = (locationType == "Andén" && dockNumber >= 10) || loadStatus == "En espera de descarga"
+                val canShowExtraFields = !isReciboOrAlmacenaje
+
+                if (canShowExtraFields) {
                     item {
                         Text("Destino de Exportación", fontWeight = FontWeight.Bold, fontSize = 14.sp)
                         var destExpanded by remember { mutableStateOf(false) }
                         val exportDestinations = listOf(
                             "CANADÁ", "UNITED KINGDOM", "FRANCE", "COREA", "JAPÓN", 
                             "CHINA", "COLOMBIA", "KENTUKY", "GERMANY", "SWEDEN", 
-                            "KN", "NZ", "PERRIS", "POLONIA", "DSV"
+                            "KN", "NZ", "PERRIS", "POLONIA", "DSV", "MXDC"
                         )
                         ExposedDropdownMenuBox(
                             expanded = destExpanded,
                             onExpandedChange = { destExpanded = !destExpanded }
                         ) {
                             OutlinedTextField(
-                                value = destination,
-                                onValueChange = { destination = it },
+                                value = destination.uppercase(),
+                                onValueChange = { destination = it.uppercase() },
                                 label = { Text("Destino") },
                                 placeholder = { Text("Seleccione o escriba el destino") },
                                 trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = destExpanded) },
@@ -2589,7 +3083,7 @@ fun AddContainerDialog(
                         )
                     }
 
-                    if (loadStatus != "Falta por completar" && loadStatus != "Falta por procesar") {
+                    if (loadStatus != "Pendiente por completar" && loadStatus != "Pendiente por procesar" && loadStatus != "Almacenaje") {
                         item {
                             OutlinedTextField(
                                 value = processedDate,
@@ -2632,8 +3126,8 @@ fun AddContainerDialog(
                         Spacer(modifier = Modifier.width(8.dp))
                         Button(
                             onClick = {
-                                if (economicNumber.isEmpty()) {
-                                    Log.e("AddContainerDialog", "No. Economico is required")
+                                if (locationType.isBlank()) {
+                                    Toast.makeText(context, "Por favor seleccione una ubicación (Andén o Patio)", Toast.LENGTH_LONG).show()
                                     return@Button
                                 }
                                 onConfirm(
@@ -2649,8 +3143,8 @@ fun AddContainerDialog(
                                     containerSize,
                                     destination,
                                     deliveryDocument,
-                                    if (loadStatus == "Falta por completar" || loadStatus == "Falta por procesar") "" else processedDate,
-                                    isStorageOnly,
+                                    if (loadStatus == "Pendiente por completar" || loadStatus == "Pendiente por procesar" || loadStatus == "En espera de descarga" || loadStatus == "Almacenaje") "" else processedDate,
+                                    isStorageOnly || loadStatus == "Almacenaje",
                                     if (type == "Caja Seca") mexCalType else null,
                                     receptionDate,
                                     materialType
@@ -2719,7 +3213,7 @@ fun AddDamagedBoxDialog(
                             containersHistory
                                 .filter { 
                                     it.economicNumber.startsWith(economicNumber, ignoreCase = true) && 
-                                    it.economicNumber.lowercase() != economicNumber.lowercase()
+                                    !it.economicNumber.equals(economicNumber, ignoreCase = true)
                                 }
                                 .distinctBy { it.economicNumber }
                                 .take(5)
@@ -2975,11 +3469,12 @@ fun InspectDockDialog(
 fun InspectionCheckItem(
     label: String,
     checked: Boolean,
-    onCheckedChange: (Boolean) -> Unit
+    onCheckedChange: (Boolean) -> Unit,
+    modifier: Modifier = Modifier
 ) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .clickable { onCheckedChange(!checked) }
             .padding(vertical = 4.dp)
@@ -3016,7 +3511,7 @@ fun formatDatePretty(dateStr: String): String {
         val date = parser.parse(dateStr) ?: return dateStr
         val formatter = SimpleDateFormat("EEEE, d 'de' MMMM 'de' yyyy", Locale("es", "ES"))
         formatter.format(date).capitalize(Locale.getDefault())
-    } catch (e: Exception) {
+    } catch (_: Exception) {
         dateStr
     }
 }

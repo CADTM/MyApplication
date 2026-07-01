@@ -2,7 +2,6 @@ package com.example.network
 
 import android.content.Context
 import android.util.Log
-import com.google.android.gms.auth.api.signin.GoogleSignIn
 import com.google.android.gms.auth.api.signin.GoogleSignInAccount
 import com.google.android.gms.auth.api.signin.GoogleSignInOptions
 import com.google.android.gms.common.api.Scope
@@ -14,12 +13,14 @@ import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
 
+@Suppress("DEPRECATION")
 object DriveUploader {
     private const val TAG = "DriveUploader"
     private val client = OkHttpClient()
 
     val DRIVE_SCOPE = Scope("https://www.googleapis.com/auth/drive.file")
 
+    @Suppress("DEPRECATION")
     fun getGoogleSignInOptions(): GoogleSignInOptions {
         return GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
             .requestEmail()
@@ -27,13 +28,14 @@ object DriveUploader {
             .build()
     }
 
+    @Suppress("DEPRECATION")
     suspend fun getAccessToken(context: Context, account: GoogleSignInAccount): String? {
         return withContext(Dispatchers.IO) {
             try {
                 GoogleAuthUtil.getToken(
                     context,
                     account.account ?: return@withContext null,
-                    "oauth2:https://www.googleapis.com/auth/drive.file"
+                    "oauth2:https://www.googleapis.com/auth/drive.file",
                 )
             } catch (e: Exception) {
                 Log.e(TAG, "Error obtaining access token", e)
@@ -83,10 +85,10 @@ object DriveUploader {
                     .build()
 
                 client.newCall(request).execute().use { response ->
-                    val responseStr = response.body?.string() ?: ""
+                    val responseStr = response.body.string()
                     if (response.isSuccessful) {
                         val json = JSONObject(responseStr)
-                        val fileId = json.optString("id", null)
+                        val fileId = json.optString("id").takeIf { it.isNotEmpty() }
                         Log.d(TAG, "Uploaded successfully to Drive, file ID: $fileId")
                         fileId
                     } else {

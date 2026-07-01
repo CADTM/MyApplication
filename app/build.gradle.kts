@@ -11,12 +11,13 @@ plugins {
 
 android {
   namespace = "com.example"
-  compileSdk { version = release(36) { minorApiLevel = 1 } }
+  compileSdk = 37
 
   defaultConfig {
     applicationId = "com.aistudio.andenesreport.qfykzc"
     minSdk = 24
-    targetSdk = 36
+    //noinspection OldTargetApi
+    targetSdk = 37
     versionCode = 1
     versionName = "1.0"
 
@@ -31,12 +32,6 @@ android {
       keyAlias = "upload"
       keyPassword = System.getenv("KEY_PASSWORD")
     }
-    create("debugConfig") {
-      storeFile = file("${rootDir}/debug.keystore")
-      storePassword = "android"
-      keyAlias = "androiddebugkey"
-      keyPassword = "android"
-    }
   }
 
   buildTypes {
@@ -47,7 +42,6 @@ android {
       signingConfig = signingConfigs.getByName("release")
     }
     debug {
-      signingConfig = signingConfigs.getByName("debugConfig")
     }
   }
   compileOptions {
@@ -59,6 +53,7 @@ android {
     buildConfig = true
   }
   testOptions { unitTests { isIncludeAndroidResources = true } }
+  buildToolsVersion = "36.1.0"
 }
 
 // Configure the Secrets Gradle Plugin to use .env and .env.example files
@@ -101,6 +96,7 @@ dependencies {
   // implementation(libs.coil.compose)
   implementation(libs.converter.moshi)
   implementation(libs.firebase.ai)
+  implementation(libs.firebase.firestore)
   implementation(libs.firebase.appcheck.recaptcha)
   implementation(libs.kotlinx.coroutines.android)
   implementation(libs.kotlinx.coroutines.core)
@@ -109,16 +105,17 @@ dependencies {
   implementation(libs.okhttp)
   // implementation(libs.play.services.location)
   implementation(libs.retrofit)
+  //noinspection LoginCredentials
   implementation(libs.play.services.auth)
-  testImplementation(libs.androidx.compose.ui.test.junit4)
+  testImplementation(platform(libs.androidx.compose.bom))
   testImplementation(libs.androidx.core)
-  testImplementation(libs.androidx.junit)
   testImplementation(libs.junit)
   testImplementation(libs.kotlinx.coroutines.test)
   testImplementation(libs.robolectric)
   testImplementation(libs.roborazzi)
   testImplementation(libs.roborazzi.compose)
   testImplementation(libs.roborazzi.junit.rule)
+  testImplementation(libs.androidx.compose.ui.test.junit4)
   androidTestImplementation(platform(libs.androidx.compose.bom))
   androidTestImplementation(libs.androidx.compose.ui.test.junit4)
   androidTestImplementation(libs.androidx.espresso.core)

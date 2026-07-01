@@ -23,6 +23,9 @@ interface ReportDao {
     @Query("SELECT * FROM container_items ORDER BY timestamp DESC")
     fun getAllContainersFlow(): Flow<List<ContainerItem>>
 
+    @Query("SELECT * FROM container_items")
+    suspend fun getAllContainers(): List<ContainerItem>
+
     @Query("SELECT * FROM container_items WHERE reportId = :reportId ORDER BY timestamp ASC")
     fun getContainersForReportFlow(reportId: String): Flow<List<ContainerItem>>
 
@@ -33,7 +36,7 @@ interface ReportDao {
     suspend fun getContainersForReport(reportId: String): List<ContainerItem>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insertContainerItem(item: ContainerItem)
+    suspend fun insertContainerItem(item: ContainerItem): Long
 
     @Delete
     suspend fun deleteContainerItem(item: ContainerItem)
@@ -49,7 +52,7 @@ interface ReportDao {
     suspend fun getDamagedBoxes(reportId: String): List<DamagedBox>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insertDamagedBox(box: DamagedBox)
+    suspend fun insertDamagedBox(box: DamagedBox): Long
 
     @Delete
     suspend fun deleteDamagedBox(box: DamagedBox)
@@ -90,7 +93,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "control_andenes_db"
                 )
-                .fallbackToDestructiveMigration()
+                .fallbackToDestructiveMigration(dropAllTables = true)
                 .build()
                 INSTANCE = instance
                 instance

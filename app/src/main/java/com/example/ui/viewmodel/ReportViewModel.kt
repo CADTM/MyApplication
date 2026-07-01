@@ -22,13 +22,11 @@ sealed interface DriveSyncState {
     data class Error(val message: String) : DriveSyncState
 }
 
+@OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 class ReportViewModel(private val repository: ReportRepository) : ViewModel() {
 
     private val _activeDate = MutableStateFlow(getTodayDateString())
     val activeDate: StateFlow<String> = _activeDate.asStateFlow()
-
-    val allReports: StateFlow<List<DailyReport>> = repository.getAllReportsFlow()
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     val activeReport: StateFlow<DailyReport?> = _activeDate.flatMapLatest { date ->
         repository.getAllReportsFlow().map { list -> list.find { it.date == date } }
@@ -49,21 +47,42 @@ class ReportViewModel(private val repository: ReportRepository) : ViewModel() {
         repository.getDockConditionsFlow(date)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    @Suppress("DEPRECATION")
     private val _googleAccount = MutableStateFlow<GoogleSignInAccount?>(null)
+    @Suppress("DEPRECATION")
     val googleAccount: StateFlow<GoogleSignInAccount?> = _googleAccount.asStateFlow()
 
     private val _driveSyncState = MutableStateFlow<DriveSyncState>(DriveSyncState.Idle)
     val driveSyncState: StateFlow<DriveSyncState> = _driveSyncState.asStateFlow()
 
+    private val _showLoadInventoryDialog = MutableStateFlow(false)
+    val showLoadInventoryDialog: StateFlow<Boolean> = _showLoadInventoryDialog.asStateFlow()
+
     init {
-        // Initialize active report for today
+        // Initialize active report for today and seed master data
         viewModelScope.launch {
-            repository.getOrCreateReport(getTodayDateString())
+            val today = getTodayDateString()
+            repository.getOrCreateReport(today)
+            PreloadedDatabase.seedToHistory(repository)
+            
+            // If the current report has NO containers, suggest loading the snapshot
+            val containers = repository.dao.getContainersForReport(today)
+            if (containers.isEmpty()) {
+                _showLoadInventoryDialog.value = true
+            }
         }
     }
 
-    fun setTodayDate() {
-        setActiveDate(getTodayDateString())
+    fun loadInitialInventory() {
+        viewModelScope.launch {
+            val today = _activeDate.value
+            PreloadedDatabase.loadSnapshotJuly7(repository, today)
+            _showLoadInventoryDialog.value = false
+        }
+    }
+
+    fun dismissLoadInventoryDialog() {
+        _showLoadInventoryDialog.value = false
     }
 
     fun setActiveDate(date: String) {
@@ -73,10 +92,12 @@ class ReportViewModel(private val repository: ReportRepository) : ViewModel() {
         }
     }
 
+    @Suppress("DEPRECATION")
     fun checkUserSignedIn(context: Context) {
         _googleAccount.value = GoogleSignIn.getLastSignedInAccount(context)
     }
 
+    @Suppress("DEPRECATION")
     fun setGoogleAccount(account: GoogleSignInAccount?) {
         _googleAccount.value = account
     }
@@ -116,7 +137,13 @@ class ReportViewModel(private val repository: ReportRepository) : ViewModel() {
                 else -> ""
             }
 
-            val isDepartureWaiting = status == "Cargada" && loadStatus == "En espera de salida"
+            val isRecibo = (locationType == "Andén" && dockNumber != null && dockNumber >= 10) || loadStatus == "En espera de descarga"
+            val isExport = !isRecibo
+            
+            // Allow destination and delivery for "Recibos" too if they are Cargado + certain statuses
+            val canHaveExportData = isExport || (status == "Cargada" && (loadStatus == "Pendiente por completar" || loadStatus == "Pendiente por procesar" || loadStatus == "En espera de salida"))
+            
+            val canHaveSeal = canHaveExportData || loadStatus == "Almacenaje" || (isStorageOnly && (loadStatus == "Pendiente por completar" || loadStatus == "Pendiente por procesar"))
 
             val item = ContainerItem(
                 reportId = reportId,
@@ -129,14 +156,14 @@ class ReportViewModel(private val repository: ReportRepository) : ViewModel() {
                 platesLocation = platesLocation.trim().uppercase(),
                 status = status,
                 loadStatus = if (status == "Cargada") loadStatus else null,
-                sealCode = if (isDepartureWaiting) sealCode?.trim() else null,
+                sealCode = if (canHaveSeal) sealCode?.trim() else null,
                 company = companyValue,
                 containerSize = if (type == "Contenedor Marítimo" && status == "Vacía") containerSize?.trim() else null,
-                destination = if (isDepartureWaiting) destination?.trim()?.uppercase() else null,
-                deliveryDocument = if (isDepartureWaiting) deliveryDocument?.trim()?.uppercase() else null,
-                processedDate = if (isDepartureWaiting) processedDate?.trim()?.uppercase() else null,
+                destination = if (canHaveExportData) destination?.trim()?.uppercase() else null,
+                deliveryDocument = if (canHaveExportData) deliveryDocument?.trim()?.uppercase() else null,
+                processedDate = if (canHaveExportData && loadStatus != "Almacenaje") processedDate?.trim()?.uppercase() else null,
                 isStorageOnly = isStorageOnly,
-                mexCalType = if (companyValue == "MEX-CAL") mexCalType else null,
+                mexCalType = mexCalType,
                 receptionDate = receptionDate,
                 materialType = materialType
             )
@@ -191,7 +218,13 @@ class ReportViewModel(private val repository: ReportRepository) : ViewModel() {
                 else -> ""
             }
 
-            val isDepartureWaiting = status == "Cargada" && loadStatus == "En espera de salida"
+            val isRecibo = (locationType == "Andén" && dockNumber != null && dockNumber >= 10) || loadStatus == "En espera de descarga"
+            val isExport = !isRecibo
+            
+            // Allow destination and delivery for "Recibos" too if they are Cargado + certain statuses
+            val canHaveExportData = isExport || (status == "Cargada" && (loadStatus == "Pendiente por completar" || loadStatus == "Pendiente por procesar" || loadStatus == "En espera de salida"))
+            
+            val canHaveSeal = canHaveExportData || loadStatus == "Almacenaje" || (isStorageOnly && (loadStatus == "Pendiente por completar" || loadStatus == "Pendiente por procesar"))
 
             val item = ContainerItem(
                 id = id,
@@ -205,14 +238,14 @@ class ReportViewModel(private val repository: ReportRepository) : ViewModel() {
                 platesLocation = platesLocation.trim().uppercase(),
                 status = status,
                 loadStatus = if (status == "Cargada") loadStatus else null,
-                sealCode = if (isDepartureWaiting) sealCode?.trim() else null,
+                sealCode = if (canHaveSeal) sealCode?.trim() else null,
                 company = companyValue,
                 containerSize = if (type == "Contenedor Marítimo" && status == "Vacía") containerSize?.trim() else null,
-                destination = if (isDepartureWaiting) destination?.trim()?.uppercase() else null,
-                deliveryDocument = if (isDepartureWaiting) deliveryDocument?.trim()?.uppercase() else null,
-                processedDate = if (isDepartureWaiting) processedDate?.trim()?.uppercase() else null,
+                destination = if (canHaveExportData) destination?.trim()?.uppercase() else null,
+                deliveryDocument = if (canHaveExportData) deliveryDocument?.trim()?.uppercase() else null,
+                processedDate = if (canHaveExportData && loadStatus != "Almacenaje") processedDate?.trim()?.uppercase() else null,
                 isStorageOnly = isStorageOnly,
-                mexCalType = if (companyValue == "MEX-CAL") mexCalType else null,
+                mexCalType = mexCalType,
                 receptionDate = receptionDate,
                 materialType = materialType
             )
@@ -251,6 +284,13 @@ class ReportViewModel(private val repository: ReportRepository) : ViewModel() {
                 damageDescription = description.trim()
             )
             repository.addDamagedBox(box)
+        }
+    }
+
+    fun importMasterData(csvContent: String, onComplete: (Int) -> Unit) {
+        viewModelScope.launch {
+            val count = repository.importUnitsFromCsv(csvContent)
+            onComplete(count)
         }
     }
 
