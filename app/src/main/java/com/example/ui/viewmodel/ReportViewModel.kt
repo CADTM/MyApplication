@@ -59,6 +59,8 @@ class ReportViewModel(private val repository: ReportRepository) : ViewModel() {
         // Initialize active report for today
         viewModelScope.launch {
             repository.getOrCreateReport(getTodayDateString())
+            // Pre-seed preloaded boxes to autocomplete history
+            PreloadedDatabase.seedToHistory(repository)
         }
     }
 
@@ -251,6 +253,21 @@ class ReportViewModel(private val repository: ReportRepository) : ViewModel() {
                 damageDescription = description.trim()
             )
             repository.addDamagedBox(box)
+        }
+    }
+
+    fun seedPreloadedToHistory(onComplete: (Int) -> Unit) {
+        viewModelScope.launch {
+            val count = PreloadedDatabase.seedToHistory(repository)
+            onComplete(count)
+        }
+    }
+
+    fun loadPreloadedToCurrentReport(onComplete: (Int) -> Unit) {
+        viewModelScope.launch {
+            val reportId = _activeDate.value
+            val count = PreloadedDatabase.loadToCurrentReport(repository, reportId)
+            onComplete(count)
         }
     }
 

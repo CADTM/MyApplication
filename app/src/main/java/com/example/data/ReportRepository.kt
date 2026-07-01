@@ -10,7 +10,7 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-class ReportRepository(private val dao: ReportDao) {
+class ReportRepository(internal val dao: ReportDao) {
 
     fun getAllReportsFlow(): Flow<List<DailyReport>> = dao.getAllDailyReportsFlow()
 
@@ -59,15 +59,34 @@ class ReportRepository(private val dao: ReportDao) {
 
     suspend fun updateReport(report: DailyReport) = dao.updateDailyReport(report)
 
-    suspend fun addContainerItem(item: ContainerItem) = dao.insertContainerItem(item)
+    suspend fun addContainerItem(item: ContainerItem): Long {
+        val generatedId = dao.insertContainerItem(item)
+        val itemToSync = if (item.id == 0L) item.copy(id = generatedId) else item
+        FirestoreSync.syncContainer(itemToSync)
+        return generatedId
+    }
 
-    suspend fun removeContainerItem(item: ContainerItem) = dao.deleteContainerItem(item)
+    suspend fun removeContainerItem(item: ContainerItem) {
+        dao.deleteContainerItem(item)
+        FirestoreSync.deleteContainer(item.id)
+    }
 
-    suspend fun removeContainerItemById(id: Long) = dao.deleteContainerItemById(id)
+    suspend fun removeContainerItemById(id: Long) {
+        dao.deleteContainerItemById(id)
+        FirestoreSync.deleteContainer(id)
+    }
 
-    suspend fun addDamagedBox(box: DamagedBox) = dao.insertDamagedBox(box)
+    suspend fun addDamagedBox(box: DamagedBox): Long {
+        val generatedId = dao.insertDamagedBox(box)
+        val boxToSync = if (box.id == 0L) box.copy(id = generatedId) else box
+        FirestoreSync.syncDamagedBox(boxToSync)
+        return generatedId
+    }
 
-    suspend fun removeDamagedBoxById(id: Long) = dao.deleteDamagedBoxById(id)
+    suspend fun removeDamagedBoxById(id: Long) {
+        dao.deleteDamagedBoxById(id)
+        FirestoreSync.deleteDamagedBox(id)
+    }
 
     suspend fun updateDockCondition(cond: DockCondition) = dao.insertDockCondition(cond)
 

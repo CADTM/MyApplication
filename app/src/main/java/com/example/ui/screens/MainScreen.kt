@@ -1231,6 +1231,81 @@ fun SyncAndExportTabContent(
                 }
             }
         }
+
+        // Preloaded Database Section
+        item {
+            Card(
+                modifier = Modifier.fillMaxWidth().testTag("preloaded_database_card"),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.3f)),
+                shape = RoundedCornerShape(16.dp)
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            Icons.Default.Storage,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.tertiary,
+                            modifier = Modifier.size(28.dp)
+                        )
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Text(
+                            text = "Base de Datos de Cajas (Predefinida)",
+                            fontWeight = FontWeight.Bold,
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.onTertiaryContainer
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Text(
+                        text = "Carga la lista de unidades con números económicos, placas y procedencia de California para agilizar el llenado de reportes. El sistema ignorará registros duplicados.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Button(
+                            onClick = {
+                                viewModel.seedPreloadedToHistory { count ->
+                                    if (count > 0) {
+                                        Toast.makeText(context, "Se agregaron $count unidades nuevas al historial de autocompletado", Toast.LENGTH_LONG).show()
+                                    } else {
+                                        Toast.makeText(context, "Todas las unidades ya existen en el historial", Toast.LENGTH_SHORT).show()
+                                    }
+                                }
+                            },
+                            modifier = Modifier.weight(1f).testTag("seed_history_button"),
+                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.tertiary)
+                        ) {
+                            Icon(Icons.Default.History, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Historial (Autofill)", fontSize = 11.sp)
+                        }
+
+                        Button(
+                            onClick = {
+                                viewModel.loadPreloadedToCurrentReport { count ->
+                                    if (count > 0) {
+                                        Toast.makeText(context, "Se cargaron $count unidades nuevas en el patio de hoy", Toast.LENGTH_LONG).show()
+                                    } else {
+                                        Toast.makeText(context, "No se agregaron unidades (todas ya están registradas hoy)", Toast.LENGTH_SHORT).show()
+                                    }
+                                }
+                            },
+                            modifier = Modifier.weight(1f).testTag("load_current_report_button"),
+                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+                        ) {
+                            Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Cargar en Patio", fontSize = 11.sp)
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 

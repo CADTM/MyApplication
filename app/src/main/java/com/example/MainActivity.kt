@@ -12,6 +12,7 @@ import androidx.compose.ui.Modifier
 import com.example.data.AppDatabase
 import com.example.data.ReportRepository
 import com.example.ui.screens.MainScreen
+import com.google.firebase.FirebaseApp
 import com.example.ui.theme.MyApplicationTheme
 import com.example.ui.viewmodel.ReportViewModel
 import com.example.ui.viewmodel.ReportViewModelFactory
@@ -19,6 +20,14 @@ import com.example.ui.viewmodel.ReportViewModelFactory
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        
+        // Initialize Firebase
+        try {
+            FirebaseApp.initializeApp(applicationContext)
+        } catch (e: Exception) {
+            android.util.Log.e("MainActivity", "Failed to initialize FirebaseApp", e)
+        }
+
         enableEdgeToEdge()
 
         // Initialize DB, Repository and ViewModel
